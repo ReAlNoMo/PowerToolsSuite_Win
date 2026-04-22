@@ -139,9 +139,16 @@ Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Status "Registering PowerShell command..." "INFO"
 
+# Register profile shortcut
+Write-Host ""
+Write-Status "Registering PowerShell command..." "INFO"
+
+$profileScriptPath = Join-Path $InstallPath "Install-Shortcut.ps1"
 if (Test-Path $profileScriptPath) {
     try {
+        Push-Location $InstallPath
         & $profileScriptPath
+        Pop-Location
         Write-Status "Profile shortcut registered" "OK"
     } catch {
         Write-Status "Profile registration failed (non-fatal): $_" "WARN"
