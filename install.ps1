@@ -161,37 +161,27 @@ if (Test-Path $profileScriptPath) {
     Write-Host "  & '$InstallPath\PS-PowerToolsSuite.ps1'" -ForegroundColor Green
 }
 
-# Offer to launch
+# Launch immediately
 Write-Host ""
 Write-Status "Installation complete!" "OK"
 Write-Host ""
-$launchNow = Read-Host "Launch PowerTools Suite now? (y/n)"
+Write-Status "Starting launcher..." "INFO"
 
 $launcherPath = Join-Path $InstallPath "PS-PowerToolsSuite.ps1"
-if ($launchNow -eq "y" -or $launchNow -eq "yes") {
-    if (Test-Path $launcherPath) {
-        Write-Status "Starting launcher in new window..." "INFO"
-        try {
-            Start-Process -FilePath "pwsh.exe" -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$launcherPath`""
-            Write-Status "Launcher started" "OK"
-            Write-Host ""
-            Write-Host "You can close this window now." -ForegroundColor Cyan
-            Start-Sleep -Seconds 2
-        } catch {
-            Write-Status "Failed to start launcher: $_" "FAIL"
-            Write-Host ""
-            Write-Host "To launch manually, run:" -ForegroundColor Yellow
-            Write-Host "  & '$launcherPath'" -ForegroundColor Green
-        }
-    } else {
-        Write-Status "Launcher not found at $launcherPath" "FAIL"
-        exit 1
+if (Test-Path $launcherPath) {
+    try {
+        Start-Process -FilePath "pwsh.exe" -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$launcherPath`""
+        Write-Status "Launcher started" "OK"
+        Write-Host ""
+        Write-Host "You can close this window now." -ForegroundColor Cyan
+        Start-Sleep -Seconds 1
+    } catch {
+        Write-Status "Failed to start launcher: $_" "FAIL"
+        Write-Host ""
+        Write-Host "To launch manually, run:" -ForegroundColor Yellow
+        Write-Host "  & '$launcherPath'" -ForegroundColor Green
     }
 } else {
-    Write-Host ""
-    Write-Host "To launch later, run:" -ForegroundColor Cyan
-    Write-Host "  PS-PowerToolsSuite" -ForegroundColor Green
-    Write-Host ""
-    Write-Host "Or manually:" -ForegroundColor Cyan
-    Write-Host "  & '$launcherPath'" -ForegroundColor Green
+    Write-Status "Launcher not found at $launcherPath" "FAIL"
+    exit 1
 }
