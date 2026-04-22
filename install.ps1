@@ -28,8 +28,8 @@ $ModulesUrl = @(
 )
 $CoreFiles = @(
     "PS-PowerToolsSuite.ps1"
-    "Install-Shortcut.ps1"
     "README.md"
+    # "Install-Shortcut.ps1"  <- optional, kann fehlen
 )
 
 # ===========================================================================
@@ -139,7 +139,6 @@ Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host ""
 Write-Status "Registering PowerShell command..." "INFO"
 
-$profileScriptPath = Join-Path $InstallPath "Install-Shortcut.ps1"
 if (Test-Path $profileScriptPath) {
     try {
         & $profileScriptPath
@@ -148,7 +147,11 @@ if (Test-Path $profileScriptPath) {
         Write-Status "Profile registration failed (non-fatal): $_" "WARN"
     }
 } else {
-    Write-Status "Install-Shortcut.ps1 not found (non-fatal)" "WARN"
+    Write-Status "Install-Shortcut.ps1 not found (manual setup needed)" "WARN"
+    Write-Host ""
+    Write-Host "To register PS-PowerToolsSuite command manually, run:" -ForegroundColor Yellow
+    Write-Host "  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Green
+    Write-Host "  & '$InstallPath\PS-PowerToolsSuite.ps1'" -ForegroundColor Green
 }
 
 # Offer to launch
