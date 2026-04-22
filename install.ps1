@@ -56,6 +56,8 @@ function Download-File {
     try {
         Write-Host -NoNewline "Downloading $(Split-Path $OutPath -Leaf)... "
         $wc = New-Object System.Net.WebClient
+        $wc.Encoding = [System.Text.Encoding]::UTF8
+        $wc.Headers.Add("User-Agent", "PowerTools-Suite-Installer")
         $wc.DownloadFile($Url, $OutPath)
         Write-Host "done" -ForegroundColor Green
         return $true
@@ -151,12 +153,35 @@ if (Test-Path $profileScriptPath) {
 
 # Offer to launch
 Write-Host ""
-Read-Host "Installation complete. Press ENTER to launch PowerTools Suite"
+Write-Status "Installation complete!" "OK"
+Write-Host ""
+$launchNow = Read-Host "Launch PowerTools Suite now? (y/n)"
 
 $launcherPath = Join-Path $InstallPath "PS-PowerToolsSuite.ps1"
-if (Test-Path $launcherPath) {
-    & $launcherPath
+if ($launchNow -eq "y" -or $launchNow -eq "yes") {
+    if (Test-Path $launcherPath) {
+        Write-Status "Starting launcher in new window..." "INFO"
+        try {
+            Start-Process -FilePath "pwsh.exe" -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$launcherPath`""
+            Write-Status "Launcher started" "OK"
+            Write-Host ""
+            Write-Host "You can close this window now." -ForegroundColor Cyan
+            Start-Sleep -Seconds 2
+        } catch {
+            Write-Status "Failed to start launcher: $_" "FAIL"
+            Write-Host ""
+            Write-Host "To launch manually, run:" -ForegroundColor Yellow
+            Write-Host "  & '$launcherPath'" -ForegroundColor Green
+        }
+    } else {
+        Write-Status "Launcher not found at $launcherPath" "FAIL"
+        exit 1
+    }
 } else {
-    Write-Status "Launcher not found" "FAIL"
-    exit 1
+    Write-Host ""
+    Write-Host "To launch later, run:" -ForegroundColor Cyan
+    Write-Host "  PS-PowerToolsSuite" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Or manually:" -ForegroundColor Cyan
+    Write-Host "  & '$launcherPath'" -ForegroundColor Green
 }
