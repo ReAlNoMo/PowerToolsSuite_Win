@@ -4,8 +4,15 @@ Unified WPF launcher for Windows utility scripts. One-click install via PowerShe
 
 ## Quick Start (GitHub)
 
+**Option 1: Direct Install (Trusted)**
 ```powershell
 irm "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/install.ps1" | iex
+```
+
+**Option 2: Safe Install (Review First)**
+```powershell
+irm "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/install.ps1" -OutFile "$env:TEMP\install.ps1"
+& "$env:TEMP\install.ps1"
 ```
 
 Then type `PS-PowerToolsSuite` in any PowerShell window.
