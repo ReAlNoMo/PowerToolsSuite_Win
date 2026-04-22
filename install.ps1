@@ -3,185 +3,117 @@
 .SYNOPSIS
     PowerTools Suite Installer
 .DESCRIPTION
-    Downloads PowerTools Suite from GitHub and installs to user's system.
-    Supports both local run and remote execution via irm | iex.
-.EXAMPLE
-    irm "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/install.ps1" | iex
+    Downloads and installs PowerTools Suite from GitHub.
+    Launches main application after installation.
+.NOTES
+    Author  : ReAlNoMo
+    Version : 1.1
 #>
 
-param(
-    [string]$InstallPath = "$env:USERPROFILE\AppData\Local\PowerTools-Suite"
-)
+$ErrorActionPreference = "Stop"
 
-# ===========================================================================
-# CONFIG
-# ===========================================================================
-$GitHubRepo = "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main"
-$TempDir = Join-Path $env:TEMP "PowerTools-Suite-Install-$([datetime]::Now.Ticks)"
-$ModulesUrl = @(
-    "01-HashVerifier"
-    "02-ExplorerViewNormalizer"
-    "03-HardwareInventory"
-    "04-SandboxieBrowserLauncher"
-    "05-GamingOptimizer"
-    "06-LinuxISODownloader"
-)
-$CoreFiles = @(
-    "PS-PowerToolsSuite.ps1"
-    "README.md"
-    # "Install-Shortcut.ps1"  <- optional, kann fehlen
-)
-
-# ===========================================================================
-# FUNCTIONS
-# ===========================================================================
-function Write-Status {
+function Write-Log {
     param([string]$Msg, [string]$Type = "INFO")
-    $prefix = switch ($Type) {
-        "OK"   { "[OK]   " }
-        "FAIL" { "[FAIL] " }
-        "WARN" { "[WARN] " }
-        default { "[INFO] " }
+    $tag = switch ($Type) {
+        "OK"   { "[OK]  " }
+        "WARN" { "[WARN]" }
+        "ERR"  { "[ERR] " }
+        default { "[INFO]" }
     }
-    Write-Host "$prefix$Msg" -ForegroundColor $(
-        if ($Type -eq "OK") { "Green" }
-        elseif ($Type -eq "FAIL") { "Red" }
+    Write-Host "$tag $Msg" -ForegroundColor $(
+        if ($Type -eq "OK")   { "Green" }
         elseif ($Type -eq "WARN") { "Yellow" }
+        elseif ($Type -eq "ERR")  { "Red" }
         else { "Cyan" }
     )
 }
 
-function Download-File {
-    param([string]$Url, [string]$OutPath)
-    try {
-        Write-Host -NoNewline "Downloading $(Split-Path $OutPath -Leaf)... "
-        $wc = New-Object System.Net.WebClient
-        $wc.Encoding = [System.Text.Encoding]::UTF8
-        $wc.Headers.Add("User-Agent", "PowerTools-Suite-Installer")
-        $wc.DownloadFile($Url, $OutPath)
-        Write-Host "done" -ForegroundColor Green
-        return $true
-    } catch {
-        Write-Host "failed" -ForegroundColor Red
-        Write-Status "Error: $_" "FAIL"
-        return $false
-    }
-}
+# Paths
+$InstallPath = Join-Path $env:LOCALAPPDATA "PowerTools-Suite"
+$TempPath    = Join-Path $env:TEMP "PowerTools-Suite-Install-$([System.Guid]::NewGuid())"
+$GitHubRaw   = "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main"
 
-# ===========================================================================
-# MAIN
-# ===========================================================================
-Clear-Host
-Write-Status "PowerTools Suite Installer" "INFO"
-Write-Status "Target: $InstallPath" "INFO"
-Write-Host ""
+Write-Log "PowerTools Suite Installer" "INFO"
+Write-Log "Target: $InstallPath" "INFO"
+Write-Log "Using temp: $TempPath" "INFO"
 
-# Create temp dir
-if (-not (Test-Path $TempDir)) {
-    New-Item -ItemType Directory -Path $TempDir -Force | Out-Null
-}
-Write-Status "Using temp: $TempDir" "INFO"
-
-# Download core files
-Write-Host ""
-Write-Status "Downloading core files..." "INFO"
-$allDownloaded = $true
-foreach ($file in $CoreFiles) {
-    $url = "$GitHubRepo/$file"
-    $out = Join-Path $TempDir $file
-    if (-not (Download-File $url $out)) {
-        $allDownloaded = $false
-    }
-}
-
-# Create modules dir in temp
-$tempModulesDir = Join-Path $TempDir "modules"
-New-Item -ItemType Directory -Path $tempModulesDir -Force | Out-Null
-
-# Download modules
-Write-Host ""
-Write-Status "Downloading modules..." "INFO"
-foreach ($mod in $ModulesUrl) {
-    $url = "$GitHubRepo/modules/$mod.ps1"
-    $out = Join-Path $tempModulesDir "$mod.ps1"
-    if (-not (Download-File $url $out)) {
-        $allDownloaded = $false
-    }
-}
-
-if (-not $allDownloaded) {
-    Write-Host ""
-    Write-Status "Download failed. Check your internet connection." "FAIL"
-    exit 1
-}
-
-# Copy to install path
-Write-Host ""
-Write-Status "Installing to $InstallPath..." "INFO"
-if (Test-Path $InstallPath) {
-    Write-Status "Removing existing installation..." "WARN"
-    Remove-Item -Path $InstallPath -Recurse -Force -ErrorAction SilentlyContinue
+# Create temp directory
+if (-not (Test-Path $TempPath)) {
+    New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
 }
 
 try {
-    Copy-Item -Path $TempDir -Destination $InstallPath -Recurse -Force
-    Write-Status "Installation complete" "OK"
-} catch {
-    Write-Status "Copy failed: $_" "FAIL"
-    exit 1
-}
-
-# Cleanup
-Write-Status "Cleaning up..." "INFO"
-Remove-Item -Path $TempDir -Recurse -Force -ErrorAction SilentlyContinue
-
-# Register profile shortcut
-Write-Host ""
-Write-Status "Registering PowerShell command..." "INFO"
-
-# Register profile shortcut
-Write-Host ""
-Write-Status "Registering PowerShell command..." "INFO"
-
-$profileScriptPath = Join-Path $InstallPath "Install-Shortcut.ps1"
-if (Test-Path $profileScriptPath) {
-    try {
-        Push-Location $InstallPath
-        & $profileScriptPath
-        Pop-Location
-        Write-Status "Profile shortcut registered" "OK"
-    } catch {
-        Write-Status "Profile registration failed (non-fatal): $_" "WARN"
+    # Download core files
+    Write-Log "Downloading core files..." "INFO"
+    $coreFiles = @("PS-PowerToolsSuite.ps1", "README.md")
+    foreach ($file in $coreFiles) {
+        Write-Host "Downloading $file... " -NoNewline
+        $url  = "$GitHubRaw/$file"
+        $dest = Join-Path $TempPath $file
+        try {
+            $wc = New-Object System.Net.WebClient
+            $wc.DownloadFile($url, $dest)
+            Write-Host "done"
+        }
+        catch {
+            Write-Log "Failed to download $file`: $_" "ERR"
+            throw
+        }
     }
-} else {
-    Write-Status "Install-Shortcut.ps1 not found (manual setup needed)" "WARN"
-    Write-Host ""
-    Write-Host "To register PS-PowerToolsSuite command manually, run:" -ForegroundColor Yellow
-    Write-Host "  Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser" -ForegroundColor Green
-    Write-Host "  & '$InstallPath\PS-PowerToolsSuite.ps1'" -ForegroundColor Green
-}
 
-# Launch immediately
-Write-Host ""
-Write-Status "Installation complete!" "OK"
-Write-Host ""
-Write-Status "Starting launcher..." "INFO"
-
-$launcherPath = Join-Path $InstallPath "PS-PowerToolsSuite.ps1"
-if (Test-Path $launcherPath) {
-    try {
-        Start-Process -FilePath "pwsh.exe" -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$launcherPath`""
-        Write-Status "Launcher started" "OK"
-        Write-Host ""
-        Write-Host "You can close this window now." -ForegroundColor Cyan
-        Start-Sleep -Seconds 1
-    } catch {
-        Write-Status "Failed to start launcher: $_" "FAIL"
-        Write-Host ""
-        Write-Host "To launch manually, run:" -ForegroundColor Yellow
-        Write-Host "  & '$launcherPath'" -ForegroundColor Green
+    # Download modules
+    Write-Log "Downloading modules..." "INFO"
+    $modulePath = Join-Path $TempPath "modules"
+    New-Item -ItemType Directory -Path $modulePath -Force | Out-Null
+    
+    $modules = @(
+        "01-HashVerifier.ps1",
+        "02-ExplorerViewNormalizer.ps1",
+        "03-HardwareInventory.ps1",
+        "04-SandboxieBrowserLauncher.ps1",
+        "05-GamingOptimizer.ps1",
+        "06-LinuxISODownloader.ps1"
+    )
+    foreach ($mod in $modules) {
+        Write-Host "Downloading $mod... " -NoNewline
+        $url  = "$GitHubRaw/modules/$mod"
+        $dest = Join-Path $modulePath $mod
+        try {
+            $wc = New-Object System.Net.WebClient
+            $wc.DownloadFile($url, $dest)
+            Write-Host "done"
+        }
+        catch {
+            Write-Log "Failed to download $mod`: $_" "ERR"
+            throw
+        }
     }
-} else {
-    Write-Status "Launcher not found at $launcherPath" "FAIL"
+
+    # Install to target
+    Write-Log "Installing to $InstallPath..." "INFO"
+    if (Test-Path $InstallPath) {
+        Write-Log "Removing existing installation..." "WARN"
+        Remove-Item -Path $InstallPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    
+    Copy-Item -Path $TempPath -Destination $InstallPath -Recurse -Force
+    Write-Log "Installation complete" "OK"
+
+    # Cleanup temp
+    Write-Log "Cleaning up..." "INFO"
+    Remove-Item -Path $TempPath -Recurse -Force -ErrorAction SilentlyContinue
+
+    # Launch
+    Write-Log "Starting launcher..." "INFO"
+    $launcherPath = Join-Path $InstallPath "PS-PowerToolsSuite.ps1"
+    Start-Process -FilePath "pwsh.exe" -ArgumentList "-NoExit", "-ExecutionPolicy", "Bypass", "-File", "`"$launcherPath`""
+    Write-Log "Launcher started" "OK"
+
+    Start-Sleep -Seconds 3
+    exit 0
+}
+catch {
+    Write-Log "Installation failed: $_" "ERR"
+    Start-Sleep -Seconds 2
     exit 1
 }
