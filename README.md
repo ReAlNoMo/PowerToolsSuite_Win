@@ -1,13 +1,12 @@
-Antwort Nr. 3
-
 ```markdown
 # PowerTools Suite
 
 Unified WPF launcher for Windows utility scripts. One-click install via PowerShell.
 
 ## Quick Start (GitHub)
-
+```
 **Option 1: Direct Install (Trusted)**
+
 ```powershell
 irm "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/install.ps1" | iex
 ```
@@ -21,8 +20,11 @@ irm "https://realnomo.tech" | iex
 irm "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/install.ps1" -OutFile "$env:TEMP\install.ps1"
 & "$env:TEMP\install.ps1"
 ```
-
-Then type `PS-PowerToolsSuite` in any PowerShell window.
+OR use
+```powershell
+irm "https://realnomo.tech" -OutFile "$env:TEMP\install.ps1"
+& "$env:TEMP\install.ps1"
+```
 
 ## Requirements
 
