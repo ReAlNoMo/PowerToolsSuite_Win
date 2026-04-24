@@ -231,7 +231,7 @@ function Global:Get-PowerToolsWindow { return $Global:PTS_Window }
             </StackPanel>
         </Grid>
 
-        <Border Grid.Row="2" Margin="36,0,36,14">
+        <Border Grid.Row="2" Margin="0,0,0,14">
             <ContentControl x:Name="ContentHost"/>
         </Border>
 
@@ -358,70 +358,116 @@ function Show-MainMenu {
     $scroll.HorizontalScrollBarVisibility = "Disabled"
     $scroll.Padding = "0,4,0,4"
 
-    $wrap = New-Object System.Windows.Controls.WrapPanel
-    $wrap.Orientation = "Horizontal"
+    $mainStack = New-Object System.Windows.Controls.StackPanel
+    $mainStack.Orientation = "Vertical"
+    $mainStack.Margin = "0,0,0,0"
 
-    foreach ($mod in $Global:PTS_Modules) {
-        $btn = New-Object System.Windows.Controls.Button
-        $btn.Style  = $script:Window.FindResource("TileButton")
-        $btn.Width  = 280
-        $btn.Height = 140
-        $btn.Margin = "0,0,16,16"
-        $btn.HorizontalContentAlignment = "Stretch"
-        $btn.VerticalContentAlignment   = "Stretch"
+    # Group modules by category
+    $categories = $Global:PTS_Modules | Group-Object -Property Category | Sort-Object Name
 
-        $stack = New-Object System.Windows.Controls.StackPanel
+    foreach ($cat in $categories) {
+        # Category Header
+        $catHeader = New-Object System.Windows.Controls.Border
+        $catHeader.Height = 50
+        $catHeader.Background = $script:Brush["Primary"]
+        $catHeader.Padding = "36,0,36,0"
+        $catHeader.Margin = "0,16,0,8"
 
-        $cat = New-Object System.Windows.Controls.TextBlock
-        $cat.Text       = $mod.Category.ToUpper()
-        $cat.Foreground = $script:Brush["Primary"]
-        $cat.FontSize   = 10
-        $cat.FontWeight = "Bold"
-        $cat.Margin     = "0,0,0,6"
-        $stack.Children.Add($cat) | Out-Null
+        $catText = New-Object System.Windows.Controls.TextBlock
+        $catText.Text = $cat.Name.ToUpper()
+        $catText.Foreground = $script:Brush["Surface"]
+        $catText.FontSize = 13
+        $catText.FontWeight = "SemiBold"
+        $catText.VerticalAlignment = "Center"
+        $catHeader.Child = $catText
+        $mainStack.Children.Add($catHeader) | Out-Null
 
-        $tbl = New-Object System.Windows.Controls.TextBlock
-        $tbl.Text         = $mod.Name
-        $tbl.Foreground   = $script:Brush["TextDark"]
-        $tbl.FontSize     = 15
-        $tbl.FontWeight   = "SemiBold"
-        $tbl.Margin       = "0,0,0,6"
-        $tbl.TextWrapping = "Wrap"
-        $stack.Children.Add($tbl) | Out-Null
+        # Tiles for category
+        $wrap = New-Object System.Windows.Controls.WrapPanel
+        $wrap.Orientation = "Horizontal"
+        $wrap.Margin = "36,0,36,0"
+        $wrap.HorizontalAlignment = "Left"
 
-        $dbl = New-Object System.Windows.Controls.TextBlock
-        $dbl.Text         = $mod.Description
-        $dbl.Foreground   = $script:Brush["TextMuted"]
-        $dbl.FontSize     = 12
-        $dbl.TextWrapping = "Wrap"
-        $dbl.LineHeight   = 17
-        $stack.Children.Add($dbl) | Out-Null
+        foreach ($mod in $cat.Group | Sort-Object Name) {
+            $btn = New-Object System.Windows.Controls.Button
+            $btn.Style  = $script:Window.FindResource("TileButton")
+            $btn.Width  = 280
+            $btn.Height = 140
+            $btn.Margin = "0,0,16,16"
+            $btn.HorizontalContentAlignment = "Stretch"
+            $btn.VerticalContentAlignment   = "Stretch"
 
-        if ($mod.RequiresAdmin) {
-            $adm = New-Object System.Windows.Controls.TextBlock
-            $adm.Text       = "REQUIRES ADMIN"
-            $adm.Foreground = $script:Brush["Warning"]
-            $adm.FontSize   = 9
-            $adm.FontWeight = "Bold"
-            $adm.Margin     = "0,8,0,0"
-            $stack.Children.Add($adm) | Out-Null
+            $stack = New-Object System.Windows.Controls.StackPanel
+
+            # Category badge (small, colored)
+            $catBadge = New-Object System.Windows.Controls.Border
+            $catBadge.Background = $script:Brush["Primary"]
+            $catBadge.CornerRadius = New-Object System.Windows.CornerRadius(4,4,4,4)
+            $catBadge.Padding = "8,3,8,3"
+            $catBadge.Width = 80
+            $catBadge.Margin = "0,0,0,6"
+            $catBadge.HorizontalAlignment = "Left"
+
+            $badgeText = New-Object System.Windows.Controls.TextBlock
+            $badgeText.Text = $mod.Category.ToUpper()
+            $badgeText.Foreground = $script:Brush["Surface"]
+            $badgeText.FontSize = 9
+            $badgeText.FontWeight = "Bold"
+            $catBadge.Child = $badgeText
+            $stack.Children.Add($catBadge) | Out-Null
+
+            # Module name
+            $tbl = New-Object System.Windows.Controls.TextBlock
+            $tbl.Text = $mod.Name
+            $tbl.Foreground = $script:Brush["TextDark"]
+            $tbl.FontSize = 15
+            $tbl.FontWeight = "SemiBold"
+            $tbl.Margin = "0,0,0,6"
+            $tbl.TextWrapping = "Wrap"
+            $stack.Children.Add($tbl) | Out-Null
+
+            # Description
+            $dbl = New-Object System.Windows.Controls.TextBlock
+            $dbl.Text = $mod.Description
+            $dbl.Foreground = $script:Brush["TextMuted"]
+            $dbl.FontSize = 12
+            $dbl.TextWrapping = "Wrap"
+            $dbl.LineHeight = 17
+            $stack.Children.Add($dbl) | Out-Null
+
+            # Admin indicator (if needed)
+            if ($mod.RequiresAdmin) {
+                $adm = New-Object System.Windows.Controls.TextBlock
+                $adm.Text = "REQUIRES ADMIN"
+                $adm.Foreground = $script:Brush["Warning"]
+                $adm.FontSize = 9
+                $adm.FontWeight = "Bold"
+                $adm.Margin = "0,8,0,0"
+                $stack.Children.Add($adm) | Out-Null
+            }
+
+            $btn.Content = $stack
+
+            $capturedMod = $mod
+            $capturedNav = $script:NavShowModuleView
+            $btn.Add_Click({
+                & $capturedNav -Module $capturedMod
+            }.GetNewClosure())
+
+            $wrap.Children.Add($btn) | Out-Null
         }
 
-        $btn.Content = $stack
+        $mainStack.Children.Add($wrap) | Out-Null
 
-        # Capture both the module and the navigation function reference.
-        # The variable $capturedNav holds the FunctionInfo object so the
-        # closure does not depend on the function name being in scope.
-        $capturedMod = $mod
-        $capturedNav = $script:NavShowModuleView
-        $btn.Add_Click({
-            & $capturedNav -Module $capturedMod
-        }.GetNewClosure())
-
-        $wrap.Children.Add($btn) | Out-Null
+        # Separator line
+        $sep = New-Object System.Windows.Controls.Border
+        $sep.Height = 1
+        $sep.Background = $script:Brush["Divider"]
+        $sep.Margin = "0,12,0,0"
+        $mainStack.Children.Add($sep) | Out-Null
     }
 
-    $scroll.Content = $wrap
+    $scroll.Content = $mainStack
     $script:UI.ContentHost.Content = $scroll
 }
 
