@@ -10,7 +10,9 @@ Unified WPF launcher for Windows utility scripts. One-click install via PowerShe
 **Option 1: Direct Install (Trusted)**
 ```powershell
 irm "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/install.ps1" | iex
-OR
+```
+OR use
+```
 irm "https://realnomo.tech" | iex
 ```
 
