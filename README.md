@@ -320,7 +320,77 @@ Register-PowerToolsModule `
 | WPF | Required |
 | Display | 1024×600+ |
 
+
 ---
+
+# ⚠️ Disclaimer & Haftungsausschluss (DE/EN)
+
+> 🚨 **Nutzung auf eigene Gefahr / Use at your own risk**
+
+---
+
+## 🇩🇪 Deutsch
+
+### ❗ Keine Gewährleistung
+Diese Software wird **ohne jegliche Gewährleistung** bereitgestellt, weder ausdrücklich noch stillschweigend.  
+Dies umfasst unter anderem:
+- Funktionalität
+- Fehlerfreiheit
+- Sicherheit
+- Kompatibilität
+
+### 🔐 Eigenverantwortung
+Mit der Nutzung dieser Software erklärst du dich damit einverstanden, dass:
+- alle Änderungen **auf eigenes Risiko** erfolgen
+- insbesondere Eingriffe in **Registry, Systemkonfiguration und Performance-Settings** Risiken bergen
+- du eigenständig für **Backups und Systemschutzmaßnahmen** verantwortlich bist
+
+### 💥 Haftungsausschluss
+Soweit gesetzlich zulässig, haftet der Autor **nicht für Schäden jeglicher Art**, insbesondere:
+- Datenverlust
+- Systemfehler oder Abstürze
+- Hardware-Schäden
+- Sicherheitsprobleme
+- indirekte oder Folgeschäden
+
+### ⚖️ Rechtlicher Hinweis
+Dieser Haftungsausschluss gilt im Rahmen der jeweils anwendbaren gesetzlichen Bestimmungen.  
+Zwingende gesetzliche Haftungsregelungen bleiben unberührt.
+
+---
+
+## 🇬🇧 English
+
+### ❗ No Warranty
+This software is provided **"as is"**, without any warranties of any kind, express or implied, including but not limited to:
+- Functionality
+- Reliability
+- Security
+- Compatibility
+
+### 🔐 User Responsibility
+By using this software, you agree that:
+- all actions are performed **at your own risk**
+- system-level modifications (registry, performance tweaks, etc.) may cause issues
+- you are responsible for **backups and system protection**
+
+### 💥 Limitation of Liability
+To the fullest extent permitted by law, the author shall **not be liable for any damages**, including but not limited to:
+- Data loss
+- System instability or crashes
+- Hardware damage
+- Security vulnerabilities
+- Indirect or consequential damages
+
+### ⚖️ Legal Notice
+This limitation of liability applies within the scope of applicable law.  
+Mandatory statutory provisions remain unaffected.
+
+---
+
+💡 **Recommendation:** Test in a VM or secondary system before applying changes.
+
+
 
 # 📜 License
 MIT
