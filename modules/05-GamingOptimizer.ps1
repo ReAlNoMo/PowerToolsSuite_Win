@@ -679,7 +679,7 @@ Register-PowerToolsModule `
             </ScrollViewer>
         </Border>
         <Button Grid.Row="4" x:Name="DetailCloseBtn" Content="Close"
-                Style="{DynamicResource SecondaryButton}" Height="38"
+                Height="38"
                 Padding="20,6" HorizontalAlignment="Right" Margin="0,14,0,0"/>
     </Grid>
 </Window>
@@ -687,6 +687,7 @@ Register-PowerToolsModule `
         $r = New-Object System.Xml.XmlNodeReader $detailXaml
         $dw = [Windows.Markup.XamlReader]::Load($r)
         $dw.Resources.Add("SecondaryButton", (Get-PowerToolsWindow).FindResource("SecondaryButton"))
+        $dw.Resources.Add("PrimaryButton",   (Get-PowerToolsWindow).FindResource("PrimaryButton"))
         $dw.Owner = Get-PowerToolsWindow
 
         $dw.FindName("DetailCategory").Text = $Tweak.Group.ToUpper()
@@ -696,7 +697,10 @@ Register-PowerToolsModule `
         $dw.FindName("DetailGain").Text     = $Tweak.FPSGain
         $dw.FindName("DetailReboot").Text   = if ($Tweak.NeedsReboot) { "Yes" } else { "No" }
         $dw.FindName("DetailLongDesc").Text = $Tweak.LongDesc
-        $dw.FindName("DetailCloseBtn").Add_Click({ $dw.Close() })
+        $detailClose = $dw.FindName("DetailCloseBtn")
+        if ($detailClose) { $detailClose.Style = $dw.FindResource("SecondaryButton") }
+        $capturedDw = $dw
+        if ($detailClose) { $detailClose.Add_Click({ $capturedDw.Close() }.GetNewClosure()) }
 
         $script:GO_detailWindows[$Tweak.Id] = $dw
         $dw.Show()
@@ -787,13 +791,17 @@ Register-PowerToolsModule `
             [System.Windows.Controls.Grid]::SetColumn($riskLbl, 2)
             $row.Children.Add($riskLbl) | Out-Null
 
+            # Add 5th column for reset button
+            $c5 = New-Object System.Windows.Controls.ColumnDefinition; $c5.Width = "Auto"
+            $row.ColumnDefinitions.Add($c5)
+
             # Details button
             $detailBtn = New-Object System.Windows.Controls.Button
             $detailBtn.Content = "Details"
             $detailBtn.Style   = (Get-PowerToolsWindow).FindResource("SecondaryButton")
             $detailBtn.Padding = "10,3"
             $detailBtn.FontSize = 10
-            $detailBtn.Margin  = "4,0,6,0"
+            $detailBtn.Margin  = "4,0,4,0"
             $detailBtn.VerticalAlignment = "Center"
             $capturedTweak2 = $t
             $detailBtn.Add_Click({
@@ -801,6 +809,34 @@ Register-PowerToolsModule `
             }.GetNewClosure())
             [System.Windows.Controls.Grid]::SetColumn($detailBtn, 3)
             $row.Children.Add($detailBtn) | Out-Null
+
+            # Reset button (only shown when tweak is already applied)
+            if ($isOk) {
+                $resetBtn = New-Object System.Windows.Controls.Button
+                $resetBtn.Content = "Reset"
+                $resetBtn.Style   = (Get-PowerToolsWindow).FindResource("SecondaryButton")
+                $resetBtn.Padding = "10,3"
+                $resetBtn.FontSize = 10
+                $resetBtn.Foreground = Get-PowerToolsBrush "Warning"
+                $resetBtn.Margin  = "0,0,6,0"
+                $resetBtn.VerticalAlignment = "Center"
+                $capturedTweak3 = $t
+                $resetBtn.Add_Click({
+                    $r = [System.Windows.MessageBox]::Show(
+                        "Reset '$($capturedTweak3.Label)' to Windows default?nThis reverts only this single tweak.",
+                        "Confirm Reset",
+                        [System.Windows.MessageBoxButton]::YesNo,
+                        [System.Windows.MessageBoxImage]::Question)
+                    if ($r -eq [System.Windows.MessageBoxResult]::Yes) {
+                        try { & $capturedTweak3.Revert
+                              GO-AddLog "Reset to default: $($capturedTweak3.Label)" "OK" }
+                        catch { GO-AddLog "Reset failed: $($capturedTweak3.Label) - $_" "FAIL" }
+                        GO-RenderList
+                    }
+                }.GetNewClosure())
+                [System.Windows.Controls.Grid]::SetColumn($resetBtn, 4)
+                $row.Children.Add($resetBtn) | Out-Null
+            }
 
             $script:GO_tweakList.Items.Add($row) | Out-Null
             $script:GO_checkboxes[$t.Id] = $cb
@@ -944,15 +980,20 @@ Register-PowerToolsModule `
             </ScrollViewer>
         </Border>
         <Button Grid.Row="3" x:Name="SoftCloseBtn" Content="Close"
-                Style="{DynamicResource SecondaryButton}" Height="38"
-                Padding="20,6" HorizontalAlignment="Right" Margin="0,14,0,0"/>
+                Height="38" Padding="20,6" HorizontalAlignment="Right" Margin="0,14,0,0"/>
     </Grid>
 </Window>
 "@
         $r = New-Object System.Xml.XmlNodeReader $softXaml
         $sw = [Windows.Markup.XamlReader]::Load($r)
         $sw.Resources.Add("SecondaryButton", (Get-PowerToolsWindow).FindResource("SecondaryButton"))
+        $sw.Resources.Add("PrimaryButton",   (Get-PowerToolsWindow).FindResource("PrimaryButton"))
         $sw.Owner = Get-PowerToolsWindow
+
+        $softClose = $sw.FindName("SoftCloseBtn")
+        if ($softClose) { $softClose.Style = $sw.FindResource("SecondaryButton") }
+        $capturedSw = $sw
+        if ($softClose) { $softClose.Add_Click({ $capturedSw.Close() }.GetNewClosure()) }
 
         $stack = $sw.FindName("SoftwareStack")
 
@@ -1065,7 +1106,7 @@ Register-PowerToolsModule `
             $stack.Children.Add($card) | Out-Null
         }
 
-        $sw.FindName("SoftCloseBtn").Add_Click({ $sw.Close() })
+        # SoftCloseBtn handled above
         $sw.Show()
     }
 
