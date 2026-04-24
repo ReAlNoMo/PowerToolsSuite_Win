@@ -19,133 +19,145 @@ Register-PowerToolsModule `
         <RowDefinition Height="*"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
-        <RowDefinition Height="160"/>
+        <RowDefinition Height="140"/>
     </Grid.RowDefinitions>
 
+    <!-- ROW 0: Hardware Info + Recommended Tools -->
     <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#D0D6F0"
-            BorderThickness="1.5" CornerRadius="10" Padding="16,12" Margin="0,0,0,10">
+            BorderThickness="1.5" CornerRadius="8" Padding="12,8" Margin="0,0,0,6">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
-                <TextBlock Text="DETECTED HARDWARE" Foreground="#8890B8" FontSize="10"
-                           FontWeight="Bold" Margin="0,0,0,4"/>
-                <TextBlock x:Name="HardwareText" Foreground="#1A1F3A" FontSize="12"
+                <TextBlock Text="DETECTED HARDWARE" Foreground="#8890B8" FontSize="9"
+                           FontWeight="Bold" Margin="0,0,0,2"/>
+                <TextBlock x:Name="HardwareText" Foreground="#1A1F3A" FontSize="11"
                            TextWrapping="Wrap" Text="Detecting..."/>
             </StackPanel>
             <Button Grid.Column="1" x:Name="SoftwareInfoBtn" Content="Recommended Tools"
-                    Style="{DynamicResource SecondaryButton}" Padding="14,8"
-                    FontSize="12" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                    Style="{DynamicResource SecondaryButton}" Padding="12,6"
+                    FontSize="11" VerticalAlignment="Center" Margin="10,0,0,0"/>
         </Grid>
     </Border>
 
+    <!-- ROW 1: Backup Options (compact) -->
     <Border Grid.Row="1" Background="#FFF4E5" BorderBrush="#D9822B"
-            BorderThickness="1.5" CornerRadius="10" Padding="14,10" Margin="0,0,0,10">
-        <StackPanel>
-            <TextBlock Text="BACKUP OPTIONS" Foreground="#8F4F0A" FontSize="10"
-                       FontWeight="Bold" Margin="0,0,0,6"/>
-            <WrapPanel>
-                <CheckBox x:Name="CbRestorePoint" Content="Create System Restore Point before applying"
-                          IsChecked="True" Margin="0,0,18,4" FontSize="12" Foreground="#1A1F3A"/>
-                <CheckBox x:Name="CbRegBackup" Content="Export Registry backup (.reg files)"
-                          IsChecked="True" Margin="0,0,18,4" FontSize="12" Foreground="#1A1F3A"/>
-                <CheckBox x:Name="CbAutoReboot" Content="Prompt for reboot when needed"
-                          IsChecked="True" Margin="0,0,0,4" FontSize="12" Foreground="#1A1F3A"/>
-            </WrapPanel>
-        </StackPanel>
+            BorderThickness="1.5" CornerRadius="8" Padding="12,6" Margin="0,0,0,6">
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="BACKUP:" Foreground="#8F4F0A" FontSize="10"
+                       FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <CheckBox Grid.Column="1" x:Name="CbRestorePoint"
+                      Content="Create Restore Point" IsChecked="True"
+                      FontSize="11" Foreground="#1A1F3A" VerticalAlignment="Center"/>
+            <CheckBox Grid.Column="2" x:Name="CbRegBackup"
+                      Content="Export Registry (.reg)" IsChecked="True"
+                      FontSize="11" Foreground="#1A1F3A" VerticalAlignment="Center"/>
+            <CheckBox Grid.Column="3" x:Name="CbAutoReboot"
+                      Content="Prompt for Reboot" IsChecked="True"
+                      FontSize="11" Foreground="#1A1F3A" VerticalAlignment="Center"/>
+        </Grid>
     </Border>
 
-    <Grid Grid.Row="2" Margin="0,0,0,10">
+    <!-- ROW 2: Selection toolbar -->
+    <Grid Grid.Row="2" Margin="0,0,0,6">
         <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <TextBlock Grid.Column="0" Text="SELECT TWEAKS TO APPLY"
-                   Foreground="#8890B8" FontSize="10" FontWeight="Bold" VerticalAlignment="Center"/>
+        <TextBlock Grid.Column="0" Text="SELECT:" Foreground="#8890B8"
+                   FontSize="10" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0"/>
         <Button Grid.Column="1" x:Name="SelectAllBtn" Content="All"
-                Style="{DynamicResource SecondaryButton}" Padding="10,6" FontSize="11" Margin="0,0,4,0"/>
+                Style="{DynamicResource SecondaryButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0"/>
         <Button Grid.Column="2" x:Name="SelectMissingBtn" Content="Missing Only"
-                Style="{DynamicResource SecondaryButton}" Padding="10,6" FontSize="11" Margin="0,0,4,0"/>
+                Style="{DynamicResource SecondaryButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0"/>
         <Button Grid.Column="3" x:Name="SelectSafeBtn" Content="Safe Only"
-                Style="{DynamicResource SecondaryButton}" Padding="10,6" FontSize="11" Margin="0,0,4,0"/>
+                Style="{DynamicResource SecondaryButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0"/>
         <Button Grid.Column="4" x:Name="SelectNoneBtn" Content="None"
-                Style="{DynamicResource SecondaryButton}" Padding="10,6" FontSize="11" Margin="0,0,4,0"/>
-        <Button Grid.Column="5" x:Name="LoadProfileBtn" Content="Load Profile"
-                Style="{DynamicResource SecondaryButton}" Padding="10,6" FontSize="11" Margin="0,0,4,0"/>
-        <Button Grid.Column="6" x:Name="SaveProfileBtn" Content="Save Profile"
-                Style="{DynamicResource SecondaryButton}" Padding="10,6" FontSize="11"/>
+                Style="{DynamicResource SecondaryButton}" Padding="10,5" FontSize="11" Margin="0,0,0,0"/>
+        <TextBlock Grid.Column="5"/>
+        <Button Grid.Column="6" x:Name="LoadProfileBtn" Content="Load Profile"
+                Style="{DynamicResource SecondaryButton}" Padding="10,5" FontSize="11" Margin="0,0,4,0"/>
+        <Button Grid.Column="7" x:Name="SaveProfileBtn" Content="Save Profile"
+                Style="{DynamicResource SecondaryButton}" Padding="10,5" FontSize="11"/>
     </Grid>
 
+    <!-- ROW 3: TWEAK LIST (takes all available space) -->
     <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#D0D6F0"
-            BorderThickness="1.5" CornerRadius="10">
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
-            <ItemsControl x:Name="TweakList" Margin="4,4,4,4"/>
+            BorderThickness="1.5" CornerRadius="8" MinHeight="200">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled">
+            <ItemsControl x:Name="TweakList" Margin="6,6,6,6"/>
         </ScrollViewer>
     </Border>
 
+    <!-- ROW 4: Estimate bar -->
     <Border Grid.Row="4" Background="#EEF1FC" BorderBrush="#B5C0E8"
-            BorderThickness="1" CornerRadius="8" Padding="14,10" Margin="0,12,0,10">
+            BorderThickness="1" CornerRadius="6" Padding="12,6" Margin="0,6,0,6">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0">
-                <TextBlock Text="ESTIMATED PERFORMANCE GAIN (selected tweaks)" Foreground="#8890B8"
-                           FontSize="10" FontWeight="Bold" Margin="0,0,0,4"/>
-                <TextBlock x:Name="EstimateText" Foreground="#1A1F3A" FontSize="12"
-                           Text="No tweaks selected. All estimates without warranty."/>
-            </StackPanel>
-            <TextBlock Grid.Column="1" Text="Click any tweak name for full details"
-                       Foreground="#8890B8" FontSize="10" FontStyle="Italic"
-                       VerticalAlignment="Center"/>
+            <TextBlock Grid.Column="0" x:Name="EstimateText" Foreground="#1A1F3A" FontSize="11"
+                       Text="No tweaks selected. All estimates without warranty."/>
+            <TextBlock Grid.Column="1" Text="Hover = short info  |  Click name = full details"
+                       Foreground="#8890B8" FontSize="10" FontStyle="Italic" VerticalAlignment="Center"/>
         </Grid>
     </Border>
 
-    <Grid Grid.Row="5" Margin="0,0,0,10">
+    <!-- ROW 5: Action buttons -->
+    <Grid Grid.Row="5" Margin="0,0,0,6">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="160"/>
-            <ColumnDefinition Width="200"/>
+            <ColumnDefinition Width="140"/>
+            <ColumnDefinition Width="180"/>
         </Grid.ColumnDefinitions>
         <Button Grid.Column="0" x:Name="ApplyBtn" Content="Apply Selected"
-                Style="{DynamicResource PrimaryButton}" Height="44" FontSize="13"
+                Style="{DynamicResource PrimaryButton}" Height="40" FontSize="13"
                 Margin="0,0,6,0" IsEnabled="False"/>
         <Button Grid.Column="1" x:Name="RecheckBtn" Content="Recheck All"
-                Style="{DynamicResource SecondaryButton}" Height="44" FontSize="12" Margin="0,0,6,0"/>
+                Style="{DynamicResource SecondaryButton}" Height="40" FontSize="11" Margin="0,0,6,0"/>
         <Button Grid.Column="2" x:Name="RevertBtn" Content="Revert to Windows Defaults"
-                Style="{DynamicResource SecondaryButton}" Height="44" FontSize="12"/>
+                Style="{DynamicResource SecondaryButton}" Height="40" FontSize="11"/>
     </Grid>
 
+    <!-- ROW 6: Activity Log -->
     <Border Grid.Row="6" Background="#FAFBFF" BorderBrush="#D8DEFA"
-            BorderThickness="1.5" CornerRadius="10">
+            BorderThickness="1.5" CornerRadius="8">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
             </Grid.RowDefinitions>
-            <Grid Grid.Row="0" Margin="14,10,14,4">
+            <Grid Grid.Row="0" Margin="12,6,12,2">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBlock Text="ACTIVITY LOG" Foreground="#8890B8" FontSize="10"
+                <TextBlock Text="ACTIVITY LOG" Foreground="#8890B8" FontSize="9"
                            FontWeight="Bold" VerticalAlignment="Center"/>
-                <Button x:Name="ClearLogBtn" Grid.Column="1" Content="Clear Log"
-                        Style="{DynamicResource SecondaryButton}" Padding="10,4" FontSize="10"/>
+                <Button x:Name="ClearLogBtn" Grid.Column="1" Content="Clear"
+                        Style="{DynamicResource SecondaryButton}" Padding="8,3" FontSize="10"/>
             </Grid>
             <ScrollViewer Grid.Row="1" x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
                 <TextBlock x:Name="LogBox" Foreground="#8890B8"
                            FontFamily="Cascadia Code, Consolas, Courier New"
-                           FontSize="11" Padding="14,6,14,12" TextWrapping="Wrap"
-                           LineHeight="18" Text="Ready. Detecting hardware and checking current status..."/>
+                           FontSize="10" Padding="12,2,12,8" TextWrapping="Wrap"
+                           LineHeight="16" Text="Ready. Detecting hardware and checking current status..."/>
             </ScrollViewer>
         </Grid>
     </Border>
@@ -716,9 +728,16 @@ Register-PowerToolsModule `
                 $hdr = New-Object System.Windows.Controls.TextBlock
                 $hdr.Text       = $t.Group.ToUpper()
                 $hdr.Foreground = Get-PowerToolsBrush "Primary"
-                $hdr.FontSize   = 10
+                $hdr.FontSize   = 9
                 $hdr.FontWeight = "Bold"
-                $hdr.Margin     = "12,14,12,6"
+                $hdr.Margin     = "8,10,8,2"
+                # Add separator line before group (except first)
+                if ($lastGroup -ne "") {
+                    $sep = New-Object System.Windows.Controls.Separator
+                    $sep.Margin = "8,4,8,0"
+                    $sep.Background = Get-PowerToolsBrush "Divider"
+                    $script:GO_tweakList.Items.Add($sep) | Out-Null
+                }
                 $script:GO_tweakList.Items.Add($hdr) | Out-Null
                 $lastGroup = $t.Group
             }
@@ -726,24 +745,28 @@ Register-PowerToolsModule `
             $isOk = & $t.Check
 
             $row = New-Object System.Windows.Controls.Grid
-            $row.Margin = "12,4,12,4"
+            $row.Margin = "8,2,8,2"
+            $row.MinHeight = 28
             $c1 = New-Object System.Windows.Controls.ColumnDefinition; $c1.Width = "*"
-            $c2 = New-Object System.Windows.Controls.ColumnDefinition; $c2.Width = "Auto"
-            $c3 = New-Object System.Windows.Controls.ColumnDefinition; $c3.Width = "Auto"
-            $c4 = New-Object System.Windows.Controls.ColumnDefinition; $c4.Width = "Auto"
+            $c2 = New-Object System.Windows.Controls.ColumnDefinition; $c2.Width = "60"
+            $c3 = New-Object System.Windows.Controls.ColumnDefinition; $c3.Width = "72"
+            $c4 = New-Object System.Windows.Controls.ColumnDefinition; $c4.Width = "56"
             $row.ColumnDefinitions.Add($c1); $row.ColumnDefinitions.Add($c2)
             $row.ColumnDefinitions.Add($c3); $row.ColumnDefinitions.Add($c4)
 
             $cb = New-Object System.Windows.Controls.CheckBox
-            $cb.FontSize    = 13
+            $cb.FontSize    = 12
             $cb.VerticalContentAlignment = "Center"
+            $cb.VerticalAlignment = "Center"
             $cb.Tag         = $t.Id
             $cb.ToolTip     = $t.ShortDesc
 
             # Make checkbox content a clickable textblock for detail view
             $cbText = New-Object System.Windows.Controls.TextBlock
             $cbText.Text       = $t.Label
-            $cbText.TextWrapping = "Wrap"
+            $cbText.TextWrapping = "NoWrap"
+            $cbText.TextTrimming = "CharacterEllipsis"
+            $cbText.FontSize   = 12
             $cbText.Cursor     = [System.Windows.Input.Cursors]::Hand
             $cbText.Foreground = if ($isOk) { Get-PowerToolsBrush "TextMuted" } else { Get-PowerToolsBrush "TextDark" }
             $cbText.TextDecorations = [System.Windows.TextDecorations]::Underline
@@ -815,11 +838,14 @@ Register-PowerToolsModule `
                 $resetBtn = New-Object System.Windows.Controls.Button
                 $resetBtn.Content = "Reset"
                 $resetBtn.Style   = (Get-PowerToolsWindow).FindResource("SecondaryButton")
-                $resetBtn.Padding = "10,3"
-                $resetBtn.FontSize = 10
+                $resetBtn.Padding = "4,2"
+                $resetBtn.FontSize = 9
+                $resetBtn.Width    = 42
+                $resetBtn.Height   = 20
                 $resetBtn.Foreground = Get-PowerToolsBrush "Warning"
-                $resetBtn.Margin  = "0,0,6,0"
+                $resetBtn.Margin  = "0,0,4,0"
                 $resetBtn.VerticalAlignment = "Center"
+                $resetBtn.HorizontalAlignment = "Center"
                 $capturedTweak3 = $t
                 $resetBtn.Add_Click({
                     $r = [System.Windows.MessageBox]::Show(
