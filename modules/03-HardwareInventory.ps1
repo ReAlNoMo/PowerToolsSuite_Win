@@ -1,5 +1,6 @@
 # Module: Hardware Inventory
 # Generates a styled HTML report of system hardware and opens it in the default browser.
+# Progress bar + live log updates via background runspace + DispatcherTimer.
 
 Register-PowerToolsModule `
     -Id            "hardware-inventory" `
@@ -13,6 +14,7 @@ Register-PowerToolsModule `
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
@@ -51,26 +53,49 @@ Register-PowerToolsModule `
                 Style="{DynamicResource SecondaryButton}" Height="46" FontSize="13" IsEnabled="False"/>
     </Grid>
 
-    <Grid Grid.Row="3" Margin="0,6,0,8">
+    <!-- Progress section -->
+    <Grid Grid.Row="3" Margin="0,0,0,6">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <TextBlock Text="ACTIVITY LOG" Foreground="#8890B8" FontSize="10"
-                   FontWeight="Bold" VerticalAlignment="Center"/>
-        <Button x:Name="ClearLogBtn" Grid.Column="1" Content="Clear Log"
-                Style="{DynamicResource SecondaryButton}" Padding="12,6" FontSize="11"/>
+        <TextBlock x:Name="StatusLabel" Grid.Column="0"
+                   Text="Idle" Foreground="#8890B8" FontSize="11"
+                   VerticalAlignment="Center"/>
+        <TextBlock x:Name="PctLabel" Grid.Column="1"
+                   Text="" Foreground="#3B5BDB" FontSize="11" FontWeight="Bold"
+                   VerticalAlignment="Center"/>
     </Grid>
+    <ProgressBar Grid.Row="4" x:Name="ProgressBar" Height="6"
+                 Minimum="0" Maximum="100" Value="0" Margin="0,0,0,14"/>
 
-    <Border Grid.Row="4" Background="#FAFBFF" BorderBrush="#D8DEFA"
-            BorderThickness="1.5" CornerRadius="10">
-        <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
-            <TextBlock x:Name="LogBox" Foreground="#8890B8"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="12" Padding="16,14" TextWrapping="Wrap"
-                       LineHeight="20" Text="Ready. Click Generate Report to begin."/>
-        </ScrollViewer>
-    </Border>
+    <Grid Grid.Row="5">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="ACTIVITY LOG" Foreground="#8890B8" FontSize="10"
+                       FontWeight="Bold" VerticalAlignment="Center"/>
+            <Button x:Name="ClearLogBtn" Grid.Column="1" Content="Clear Log"
+                    Style="{DynamicResource SecondaryButton}" Padding="12,6" FontSize="11"/>
+        </Grid>
+
+        <Border Grid.Row="1" Background="#FAFBFF" BorderBrush="#D8DEFA"
+                BorderThickness="1.5" CornerRadius="10" MinHeight="160">
+            <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="LogBox" Foreground="#8890B8"
+                           FontFamily="Cascadia Code, Consolas, Courier New"
+                           FontSize="12" Padding="16,14" TextWrapping="Wrap"
+                           LineHeight="20" Text="Ready. Click Generate Report to begin."/>
+            </ScrollViewer>
+        </Border>
+    </Grid>
 </Grid>
 "@
 
@@ -82,81 +107,151 @@ Register-PowerToolsModule `
         $view.Resources.Add($k, $win.FindResource($k))
     }
 
-    # All controls in script-scope so event handlers can reach them
-    $script:HW_generate    = $view.FindName("GenerateBtn")
-    $script:HW_openLast    = $view.FindName("OpenLastBtn")
-    $script:HW_clearLog    = $view.FindName("ClearLogBtn")
-    $script:HW_outputLbl   = $view.FindName("OutputPath")
-    $script:HW_logBox      = $view.FindName("LogBox")
-    $script:HW_logScroller = $view.FindName("LogScroller")
-    $script:HW_initText    = "Ready. Click Generate Report to begin."
-    $script:HW_lastReport  = ""
+    $Global:HW_generate     = $view.FindName("GenerateBtn")
+    $Global:HW_openLast     = $view.FindName("OpenLastBtn")
+    $Global:HW_clearLog     = $view.FindName("ClearLogBtn")
+    $Global:HW_outputLbl    = $view.FindName("OutputPath")
+    $Global:HW_logBox       = $view.FindName("LogBox")
+    $Global:HW_logScroller  = $view.FindName("LogScroller")
+    $Global:HW_progress     = $view.FindName("ProgressBar")
+    $Global:HW_statusLabel  = $view.FindName("StatusLabel")
+    $Global:HW_pctLabel     = $view.FindName("PctLabel")
+    $Global:HW_initText     = "Ready. Click Generate Report to begin."
+    $Global:HW_lastReport   = ""
+    $Global:HW_msgQueue     = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+    $Global:HW_timer        = $null
 
-    $script:HW_outputLbl.Text = Join-Path $env:USERPROFILE "Desktop\Hardware_Report_<timestamp>.html"
+    $Global:HW_outputLbl.Text = Join-Path $env:USERPROFILE "Desktop\Hardware_Report_<timestamp>.html"
 
     function Global:HW-AddLog {
         param([string]$Msg, [string]$Type = "INFO")
         $ts  = Get-Date -Format "HH:mm:ss"
         $tag = switch ($Type) { "OK"{"[OK]  "} "FAIL"{"[FAIL]"} "WARN"{"[WARN]"} default{"[INFO]"} }
         $entry = "[$ts]  $tag  $Msg`n"
-        if ($script:HW_logBox.Text -eq $script:HW_initText) { $script:HW_logBox.Text = $entry }
-        else { $script:HW_logBox.Text += $entry }
-        $script:HW_logScroller.Dispatcher.Invoke([action]{ $script:HW_logScroller.ScrollToEnd() })
+        if ($Global:HW_logBox.Text -eq $Global:HW_initText) { $Global:HW_logBox.Text = $entry }
+        else { $Global:HW_logBox.Text += $entry }
+        $Global:HW_logScroller.ScrollToEnd()
     }
 
-    function Global:HW-ConvertSize {
-        param([long]$Bytes)
-        if ($Bytes -ge 1TB) { return "{0:N2} TB" -f ($Bytes / 1TB) }
-        elseif ($Bytes -ge 1GB) { return "{0:N2} GB" -f ($Bytes / 1GB) }
-        elseif ($Bytes -ge 1MB) { return "{0:N2} MB" -f ($Bytes / 1MB) }
-        else { return "{0:N2} KB" -f ($Bytes / 1KB) }
-    }
-
-    function Global:HW-HtmlTable {
-        param([array]$Data, [string[]]$Props)
-        $sb = [System.Text.StringBuilder]::new()
-        [void]$sb.Append("<table><tr>")
-        foreach ($p in $Props) { [void]$sb.Append("<th>$p</th>") }
-        [void]$sb.Append("</tr>")
-        foreach ($item in $Data) {
-            [void]$sb.Append("<tr>")
-            foreach ($p in $Props) {
-                $v = $item.$p; if ($null -eq $v -or $v -eq "") { $v = "-" }
-                [void]$sb.Append("<td>$v</td>")
+    function Global:HW-StartTimer {
+        $Global:HW_timer = New-Object System.Windows.Threading.DispatcherTimer
+        $Global:HW_timer.Interval = [TimeSpan]::FromMilliseconds(150)
+        $Global:HW_timer.Add_Tick({
+            $item = $null
+            while ($Global:HW_msgQueue.TryDequeue([ref]$item)) {
+                switch ($item.Type) {
+                    "LOG" {
+                        HW-AddLog -Msg $item.Msg -Type $item.Tag
+                    }
+                    "PROGRESS" {
+                        $Global:HW_progress.Value   = $item.Pct
+                        $Global:HW_statusLabel.Text = $item.Status
+                        $Global:HW_pctLabel.Text    = "$($item.Pct)%"
+                    }
+                    "DONE" {
+                        $Global:HW_timer.Stop()
+                        $Global:HW_progress.Value        = 100
+                        $Global:HW_pctLabel.Text         = "100%"
+                        $Global:HW_statusLabel.Text      = "Report generated"
+                        $Global:HW_statusLabel.Foreground = $Global:PTS_Brush["Success"]
+                        $Global:HW_generate.IsEnabled    = $true
+                        $Global:HW_generate.Content      = "Generate Report"
+                        $Global:HW_lastReport            = $item.ReportPath
+                        $Global:HW_outputLbl.Text        = $item.ReportPath
+                        $Global:HW_openLast.IsEnabled    = $true
+                        if ($item.ReportPath -ne "") { Start-Process $item.ReportPath }
+                    }
+                    "ERROR" {
+                        $Global:HW_timer.Stop()
+                        $Global:HW_statusLabel.Text      = "Error"
+                        $Global:HW_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
+                        $Global:HW_generate.IsEnabled    = $true
+                        $Global:HW_generate.Content      = "Generate Report"
+                    }
+                }
             }
-            [void]$sb.Append("</tr>")
-        }
-        [void]$sb.Append("</table>")
-        return $sb.ToString()
+        })
+        $Global:HW_timer.Start()
     }
 
-    $script:HW_generate.Add_Click({
-        $script:HW_generate.IsEnabled = $false
-        $script:HW_generate.Content   = "Generating..."
+    # Background report generation script
+    $Global:HW_reportScript = {
+        param($ReportPath, $Queue)
+
+        function Q-Log   { param($M,$T="INFO") $Queue.Enqueue([PSCustomObject]@{Type="LOG";Msg=$M;Tag=$T}) }
+        function Q-Prog  { param($P,$S)        $Queue.Enqueue([PSCustomObject]@{Type="PROGRESS";Pct=$P;Status=$S}) }
+
+        function ConvertSize {
+            param([long]$Bytes)
+            if ($Bytes -ge 1TB) { return "{0:N2} TB" -f ($Bytes / 1TB) }
+            elseif ($Bytes -ge 1GB) { return "{0:N2} GB" -f ($Bytes / 1GB) }
+            elseif ($Bytes -ge 1MB) { return "{0:N2} MB" -f ($Bytes / 1MB) }
+            else { return "{0:N2} KB" -f ($Bytes / 1KB) }
+        }
+
+        function HtmlTable {
+            param([array]$Data, [string[]]$Props)
+            $sb = [System.Text.StringBuilder]::new()
+            [void]$sb.Append("<table><tr>")
+            foreach ($p in $Props) { [void]$sb.Append("<th>$p</th>") }
+            [void]$sb.Append("</tr>")
+            foreach ($item in $Data) {
+                [void]$sb.Append("<tr>")
+                foreach ($p in $Props) {
+                    $v = $item.$p
+                    if ($null -eq $v -or $v -eq "") { $v = "-" }
+                    [void]$sb.Append("<td>$v</td>")
+                }
+                [void]$sb.Append("</tr>")
+            }
+            [void]$sb.Append("</table>")
+            return $sb.ToString()
+        }
+
         try {
-            HW-AddLog "Collecting system information..." "INFO"
             $ErrorActionPreference = "SilentlyContinue"
 
-            $rp = Join-Path $env:USERPROFILE ("Desktop\Hardware_Report_{0}.html" -f (Get-Date -Format 'yyyy-MM-dd_HH-mm'))
-            $script:HW_outputLbl.Text = $rp
+            Q-Prog 5  "Collecting: System / Mainboard..."
+            Q-Log  "Collecting system information..."
+            $CS    = Get-CimInstance Win32_ComputerSystem
+            $BIOS  = Get-CimInstance Win32_BIOS
+            $Board = Get-CimInstance Win32_BaseBoard
 
-            $CS       = Get-CimInstance Win32_ComputerSystem
-            $BIOS     = Get-CimInstance Win32_BIOS
-            $Board    = Get-CimInstance Win32_BaseBoard
-            $CPUs     = Get-CimInstance Win32_Processor
+            Q-Prog 15 "Collecting: CPU..."
+            Q-Log  "Collecting CPU data..."
+            $CPUs = Get-CimInstance Win32_Processor
+
+            Q-Prog 25 "Collecting: RAM..."
+            Q-Log  "Collecting RAM data..."
             $RAMSlots = Get-CimInstance Win32_PhysicalMemory
             $RAMTotal = ($RAMSlots | Measure-Object -Property Capacity -Sum).Sum
-            $GPUs     = Get-CimInstance Win32_VideoController
-            $Disks    = Get-CimInstance Win32_DiskDrive
-            $Parts    = Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }
-            $NICs     = Get-CimInstance Win32_NetworkAdapter | Where-Object {
+
+            Q-Prog 35 "Collecting: GPU..."
+            Q-Log  "Collecting GPU data..."
+            $GPUs = Get-CimInstance Win32_VideoController
+
+            Q-Prog 45 "Collecting: Storage..."
+            Q-Log  "Collecting storage data..."
+            $Disks = Get-CimInstance Win32_DiskDrive
+            $Parts = Get-CimInstance Win32_LogicalDisk | Where-Object { $_.DriveType -eq 3 }
+
+            Q-Prog 55 "Collecting: Network adapters..."
+            Q-Log  "Collecting network adapter data..."
+            $NICs   = Get-CimInstance Win32_NetworkAdapter | Where-Object {
                 $_.PhysicalAdapter -eq $true -and $_.Name -notmatch "Virtual|Bluetooth|WAN|Miniport"
             }
-            $NICCfg   = Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -eq $true }
-            $Audio    = Get-CimInstance Win32_SoundDevice
-            $Drivers  = Get-CimInstance Win32_PnPSignedDriver | Where-Object { $_.DeviceName -ne $null }
+            $NICCfg = Get-CimInstance Win32_NetworkAdapterConfiguration | Where-Object { $_.IPEnabled -eq $true }
 
-            HW-AddLog "Building HTML report..." "INFO"
+            Q-Prog 65 "Collecting: Audio devices..."
+            Q-Log  "Collecting audio device data..."
+            $Audio = Get-CimInstance Win32_SoundDevice
+
+            Q-Prog 75 "Collecting: PnP drivers (may take a moment)..."
+            Q-Log  "Collecting PnP driver data..."
+            $Drivers = Get-CimInstance Win32_PnPSignedDriver | Where-Object { $_.DeviceName -ne $null }
+
+            Q-Prog 85 "Building HTML report..."
+            Q-Log  "Building HTML report..."
 
             $css  = "body{font-family:Segoe UI,Arial,sans-serif;background:#1a1a2e;color:#eee;margin:20px}"
             $css += "h1{color:#00d4ff;text-align:center;border-bottom:2px solid #00d4ff;padding-bottom:10px}"
@@ -195,46 +290,46 @@ Register-PowerToolsModule `
                 $h += "<tr><td>Logical Cores</td><td>$($cpu.NumberOfLogicalProcessors)</td></tr>"
                 $h += "<tr><td>Max Clock Speed</td><td>$($cpu.MaxClockSpeed) MHz</td></tr>"
                 $h += "<tr><td>Socket</td><td>$($cpu.SocketDesignation)</td></tr>"
-                $h += "<tr><td>L2 Cache</td><td>$(HW-ConvertSize ($cpu.L2CacheSize * 1024))</td></tr>"
-                $h += "<tr><td>L3 Cache</td><td>$(HW-ConvertSize ($cpu.L3CacheSize * 1024))</td></tr>"
+                $h += "<tr><td>L2 Cache</td><td>$(ConvertSize ($cpu.L2CacheSize * 1024))</td></tr>"
+                $h += "<tr><td>L3 Cache</td><td>$(ConvertSize ($cpu.L3CacheSize * 1024))</td></tr>"
                 $h += "<tr><td>Driver Version</td><td>$($cd.DriverVersion)</td></tr>"
                 $h += "<tr><td>Driver Date</td><td>$($cd.DriverDate)</td></tr></table>"
             }
 
             $h += "<h2>Memory (RAM)</h2>"
-            $h += "<p><strong>Total: $(HW-ConvertSize $RAMTotal) | $($RAMSlots.Count) Module(s)</strong></p>"
+            $h += "<p><strong>Total: $(ConvertSize $RAMTotal) | $($RAMSlots.Count) Module(s)</strong></p>"
             $ramD = $RAMSlots | Select-Object `
-                @{N="Slot";E={$_.DeviceLocator}}, @{N="Capacity";E={HW-ConvertSize $_.Capacity}},
+                @{N="Slot";E={$_.DeviceLocator}}, @{N="Capacity";E={ConvertSize $_.Capacity}},
                 @{N="Speed";E={"$($_.Speed) MHz"}}, @{N="Manufacturer";E={$_.Manufacturer}},
                 @{N="Part Number";E={$_.PartNumber}}, @{N="Serial Number";E={$_.SerialNumber}}
-            $h += HW-HtmlTable -Data $ramD -Props "Slot","Capacity","Speed","Manufacturer","Part Number","Serial Number"
+            $h += HtmlTable -Data $ramD -Props "Slot","Capacity","Speed","Manufacturer","Part Number","Serial Number"
 
             $h += "<h2>Graphics Card (GPU)</h2>"
             $gpuD = $GPUs | Select-Object Name,
-                @{N="VRAM";E={HW-ConvertSize $_.AdapterRAM}},
+                @{N="VRAM";E={ConvertSize $_.AdapterRAM}},
                 @{N="Resolution";E={"$($_.CurrentHorizontalResolution) x $($_.CurrentVerticalResolution)"}},
                 @{N="Driver";E={$_.DriverVersion}}, @{N="Driver Date";E={$_.DriverDate}}, Status
-            $h += HW-HtmlTable -Data $gpuD -Props "Name","VRAM","Resolution","Driver","Driver Date","Status"
+            $h += HtmlTable -Data $gpuD -Props "Name","VRAM","Resolution","Driver","Driver Date","Status"
 
             $h += "<h2>Storage Drives</h2>"
             $diskD = $Disks | ForEach-Object {
                 [PSCustomObject]@{
                     "Model"="$($_.Model)"; "Interface"="$($_.InterfaceType)";
-                    "Size"=(HW-ConvertSize $_.Size); "Serial Number"="$($_.SerialNumber.Trim())";
+                    "Size"=(ConvertSize $_.Size); "Serial Number"="$($_.SerialNumber.Trim())";
                     "Partitions"="$($_.Partitions)"; "Status"="$($_.Status)"
                 }
             }
-            $h += HW-HtmlTable -Data $diskD -Props "Model","Interface","Size","Serial Number","Partitions","Status"
+            $h += HtmlTable -Data $diskD -Props "Model","Interface","Size","Serial Number","Partitions","Status"
 
             $h += "<h2>Logical Drives</h2>"
             $partD = $Parts | Select-Object @{N="Drive";E={$_.DeviceID}},
-                @{N="Size";E={HW-ConvertSize $_.Size}}, @{N="Free";E={HW-ConvertSize $_.FreeSpace}},
+                @{N="Size";E={ConvertSize $_.Size}}, @{N="Free";E={ConvertSize $_.FreeSpace}},
                 @{N="File System";E={$_.FileSystem}}, @{N="Label";E={$_.VolumeName}}
-            $h += HW-HtmlTable -Data $partD -Props "Drive","Size","Free","File System","Label"
+            $h += HtmlTable -Data $partD -Props "Drive","Size","Free","File System","Label"
 
             $h += "<h2>Network Adapters</h2>"
             $nicD = $NICs | ForEach-Object {
-                $n = $_
+                $n   = $_
                 $drv = $Drivers | Where-Object { $_.DeviceName -eq $n.Name } | Select-Object -First 1
                 $ip  = $NICCfg  | Where-Object { $_.Description -eq $n.Name }
                 [PSCustomObject]@{
@@ -243,17 +338,18 @@ Register-PowerToolsModule `
                     "Driver Date"=$drv.DriverDate; "IP"=($ip.IPAddress -join ", ")
                 }
             }
-            $h += HW-HtmlTable -Data $nicD -Props "Name","Manufacturer","MAC","Type","Driver","Driver Date","IP"
+            $h += HtmlTable -Data $nicD -Props "Name","Manufacturer","MAC","Type","Driver","Driver Date","IP"
 
             $h += "<h2>Audio Devices</h2>"
             $audD = $Audio | ForEach-Object {
-                $a = $_; $drv = $Drivers | Where-Object { $_.DeviceName -eq $a.Name } | Select-Object -First 1
+                $a = $_
+                $drv = $Drivers | Where-Object { $_.DeviceName -eq $a.Name } | Select-Object -First 1
                 [PSCustomObject]@{
                     "Name"=$a.Name; "Manufacturer"=$a.Manufacturer; "Status"=$a.Status;
                     "Driver"=$drv.DriverVersion; "Driver Date"=$drv.DriverDate
                 }
             }
-            $h += HW-HtmlTable -Data $audD -Props "Name","Manufacturer","Status","Driver","Driver Date"
+            $h += HtmlTable -Data $audD -Props "Name","Manufacturer","Status","Driver","Driver Date"
 
             $h += "<h2>All PnP Drivers</h2>"
             $drvD = $Drivers | Where-Object { $_.DriverVersion -ne $null } |
@@ -261,34 +357,58 @@ Register-PowerToolsModule `
                 Select-Object @{N="Class";E={$_.DeviceClass}}, @{N="Device";E={$_.DeviceName}},
                     @{N="Version";E={$_.DriverVersion}}, @{N="Provider";E={$_.DriverProviderName}},
                     @{N="Date";E={$_.DriverDate}}
-            $h += HW-HtmlTable -Data $drvD -Props "Class","Device","Version","Provider","Date"
+            $h += HtmlTable -Data $drvD -Props "Class","Device","Version","Provider","Date"
 
             $h += "<div class='info'>Report by PowerTools Suite | $(Get-Date -Format 'MM/dd/yyyy HH:mm:ss')</div>"
             $h += "</body></html>"
 
-            $h | Out-File -FilePath $rp -Encoding UTF8
-            $script:HW_lastReport = $rp
-            HW-AddLog "Report saved: $rp" "OK"
-            HW-AddLog "Opening in browser..." "INFO"
-            Start-Process $rp
-            $script:HW_openLast.IsEnabled = $true
+            Q-Prog 95 "Saving report..."
+            Q-Log  "Saving report to: $ReportPath"
+            $h | Out-File -FilePath $ReportPath -Encoding UTF8
+
+            Q-Log "Report saved: $ReportPath" "OK"
+            $Queue.Enqueue([PSCustomObject]@{Type="DONE"; ReportPath=$ReportPath})
         }
-        catch { HW-AddLog "Error: $_" "FAIL" }
-        finally {
-            $script:HW_generate.IsEnabled = $true
-            $script:HW_generate.Content   = "Generate Report"
+        catch {
+            Q-Log "Error: $_" "FAIL"
+            $Queue.Enqueue([PSCustomObject]@{Type="ERROR"})
         }
+    }
+
+    $Global:HW_generate.Add_Click({
+        $Global:HW_generate.IsEnabled        = $false
+        $Global:HW_generate.Content          = "Generating..."
+        $Global:HW_progress.Value            = 0
+        $Global:HW_pctLabel.Text             = "0%"
+        $Global:HW_statusLabel.Text          = "Starting..."
+        $Global:HW_statusLabel.Foreground    = $Global:PTS_Brush["TextMuted"]
+        $Global:HW_msgQueue                  = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+
+        $rp = Join-Path $env:USERPROFILE ("Desktop\Hardware_Report_{0}.html" -f (Get-Date -Format 'yyyy-MM-dd_HH-mm'))
+        $Global:HW_outputLbl.Text = $rp
+
+        HW-AddLog "Starting hardware inventory..." "INFO"
+        HW-StartTimer
+
+        $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+        $rs.Open()
+        $ps = [System.Management.Automation.PowerShell]::Create()
+        $ps.Runspace = $rs
+        $ps.AddScript($Global:HW_reportScript) | Out-Null
+        $ps.AddArgument($rp)                   | Out-Null
+        $ps.AddArgument($Global:HW_msgQueue)   | Out-Null
+        $ps.BeginInvoke() | Out-Null
     })
 
-    $script:HW_openLast.Add_Click({
-        if ($script:HW_lastReport -and (Test-Path $script:HW_lastReport)) {
-            Start-Process $script:HW_lastReport
-            HW-AddLog "Opened: $($script:HW_lastReport)" "INFO"
+    $Global:HW_openLast.Add_Click({
+        if ($Global:HW_lastReport -and (Test-Path $Global:HW_lastReport)) {
+            Start-Process $Global:HW_lastReport
+            HW-AddLog "Opened: $($Global:HW_lastReport)" "INFO"
         } else { HW-AddLog "No report available." "WARN" }
     })
 
-    $script:HW_clearLog.Add_Click({
-        $script:HW_logBox.Text = ""
+    $Global:HW_clearLog.Add_Click({
+        $Global:HW_logBox.Text = ""
         HW-AddLog "Log cleared." "INFO"
     })
 
