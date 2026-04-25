@@ -102,11 +102,67 @@ $Global:PTS_Theme = @{
     Divider           = "#E0E5F5"
 }
 
+$Global:PTS_ThemeDark = @{
+    Primary           = "#5B7FFF"
+    PrimaryDark       = "#4A68E8"
+    SidebarBg         = "#0F1429"
+    SidebarDivider    = "#1A1F3A"
+    SidebarHover      = "#1F2847"
+    SidebarActive     = "#5B7FFF"
+    SidebarBadgeBg    = "#1A1F3A"
+    SidebarBadgeBgActive = "#4A68E8"
+    SidebarText       = "#8890B8"
+    SidebarTextActive = "#FFFFFF"
+    Background        = "#0F1429"
+    Surface           = "#1A1F3A"
+    Border            = "#2A3050"
+    TextDark          = "#E0E6FF"
+    TextMid           = "#B0B8D8"
+    TextMuted         = "#8890B8"
+    TextFaint         = "#6A72A0"
+    Success           = "#4AB876"
+    Danger            = "#E85555"
+    Warning           = "#FFB950"
+    LogBg             = "#141A2E"
+    LogBorder         = "#2A3050"
+    Divider           = "#1F2847"
+}
+
+$Global:PTS_DarkModeEnabled = $false
+
 function Global:New-PTSBrush {
     param([string]$Hex)
     [System.Windows.Media.SolidColorBrush]::new(
         [System.Windows.Media.ColorConverter]::ConvertFromString($Hex)
     )
+}
+
+function Global:Apply-PTSTheme {
+    param([bool]$DarkMode = $false)
+    
+    $Global:PTS_DarkModeEnabled = $DarkMode
+    $themeSource = if ($DarkMode) { $Global:PTS_ThemeDark } else { $Global:PTS_Theme }
+    
+    # Rebuild all brushes
+    $Global:PTS_Brush = @{}
+    foreach ($k in $themeSource.Keys) {
+        $Global:PTS_Brush[$k] = New-PTSBrush $themeSource[$k]
+    }
+    
+    # Apply to window
+    $Global:PTS_Window.Background = $Global:PTS_Brush["Background"]
+    
+    # Rebuild UI components with new colors
+    if ($Global:PTS_UI) {
+        $Global:PTS_UI.SidebarPanel.Background = $Global:PTS_Brush["SidebarBg"]
+        $Global:PTS_UI.ContentHost.Background = $Global:PTS_Brush["Background"]
+        $Global:PTS_UI.HeaderEyebrow.Foreground = $Global:PTS_Brush["TextMuted"]
+        $Global:PTS_UI.HeaderTitle.Foreground = $Global:PTS_Brush["TextDark"]
+        $Global:PTS_UI.HeaderSubtitle.Foreground = $Global:PTS_Brush["TextMid"]
+        $Global:PTS_UI.HeaderBorder.BorderBrush = $Global:PTS_Brush["Divider"]
+        $Global:PTS_UI.FooterBorder.BorderBrush = $Global:PTS_Brush["Divider"]
+        $Global:PTS_UI.FooterStatus.Foreground = $Global:PTS_Brush["TextMuted"]
+    }
 }
 
 # Pre-build all brushes as Global hashtable
@@ -127,7 +183,7 @@ function Global:Get-PowerToolsWindow { return $Global:PTS_Window }
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="PowerTools Suite"
-    Width="1060" Height="720"
+    Width="1060" Height="792"
     MinWidth="900" MinHeight="600"
     WindowStartupLocation="CenterScreen"
     Background="#F4F6FB"
@@ -194,6 +250,21 @@ function Global:Get-PowerToolsWindow { return $Global:PTS_Window }
                 </Setter.Value>
             </Setter>
         </Style>
+
+        <ControlTemplate x:Key="DarkModeToggleTemplate" TargetType="ToggleButton">
+            <Grid Background="#FFFFFF" CornerRadius="12" BorderBrush="#D0D6F0" BorderThickness="1.5">
+                <Border x:Name="ToggleTrack" Background="#E8EEF8" CornerRadius="12"/>
+                <Border x:Name="ToggleThumb" Background="#3B5BDB" CornerRadius="10" Width="20" Height="20" HorizontalAlignment="Left" Margin="2,2,0,2"/>
+            </Grid>
+            <ControlTemplate.Triggers>
+                <Trigger Property="IsChecked" Value="True">
+                    <Setter TargetName="ToggleTrack" Property="Background" Value="#1A1F3A"/>
+                    <Setter TargetName="ToggleThumb" Property="HorizontalAlignment" Value="Right"/>
+                    <Setter TargetName="ToggleThumb" Property="Margin" Value="0,2,2,2"/>
+                    <Setter TargetName="ToggleThumb" Property="Background" Value="#5B7FFF"/>
+                </Trigger>
+            </ControlTemplate.Triggers>
+        </ControlTemplate>
 
         <Style x:Key="TileButton" TargetType="Button">
             <Setter Property="Background" Value="#FFFFFF"/>
@@ -262,22 +333,31 @@ function Global:Get-PowerToolsWindow { return $Global:PTS_Window }
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
                 <Border Grid.Row="0" Padding="20,20,20,12">
                     <StackPanel>
-                        <TextBlock Text="POWERTOOLS"
-                                   Foreground="#3B5BDB" FontSize="28" FontWeight="Bold"
-                                   Margin="0,0,0,0"/>
-                        <TextBlock Text="Suite"
-                                   Foreground="#FFFFFF" FontSize="28" FontWeight="Bold"
-                                   Margin="0,0,0,0"/>
+                        <TextBlock Foreground="#3B5BDB" FontSize="28" FontWeight="Bold" Margin="0,0,0,0" Letter Spacing="0.08em">PowerTools</TextBlock>
+                        <TextBlock Foreground="#FFFFFF" FontSize="28" FontWeight="Bold" Margin="0,0,0,0" Letter Spacing="0.15em">Suite</TextBlock>
                     </StackPanel>
                 </Border>
 
                 <Border Grid.Row="1" Height="1" Background="#232D6B"/>
 
                 <StackPanel x:Name="SidebarPanel" Grid.Row="2" Margin="0,8,0,0"/>
+
+                <Border Grid.Row="3" Height="1" Background="#232D6B" Margin="0,8,0,8"/>
+
+                <Grid Grid.Row="4" Margin="12,0,12,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Light / Dark Mode" Foreground="#A8B4E8" FontSize="11" VerticalAlignment="Center"/>
+                    <ToggleButton x:Name="DarkModeToggle" Grid.Column="1" Width="50" Height="24" Background="#FFFFFF" BorderBrush="#D0D6F0" BorderThickness="1.5" Cursor="Hand" Template="{StaticResource DarkModeToggleTemplate}" Margin="8,0,0,0"/>
+                </Grid>
             </Grid>
 
             <!-- RIGHT CONTENT -->
@@ -362,15 +442,24 @@ $Global:PTS_Window = [Windows.Markup.XamlReader]::Load($reader)
 
 # Cache UI element references in Global hashtable (accessible from event handlers)
 $Global:PTS_UI = @{
-    ContentHost     = $Global:PTS_Window.FindName("ContentHost")
-    ContentScroller = $Global:PTS_Window.FindName("ContentScroller")
-    SidebarPanel    = $Global:PTS_Window.FindName("SidebarPanel")
-    HeaderEyebrow   = $Global:PTS_Window.FindName("HeaderEyebrow")
-    HeaderTitle     = $Global:PTS_Window.FindName("HeaderTitle")
-    HeaderSubtitle  = $Global:PTS_Window.FindName("HeaderSubtitle")
-    BackBtn         = $Global:PTS_Window.FindName("BackBtn")
-    FooterStatus    = $Global:PTS_Window.FindName("FooterStatus")
+    ContentHost      = $Global:PTS_Window.FindName("ContentHost")
+    ContentScroller  = $Global:PTS_Window.FindName("ContentScroller")
+    SidebarPanel     = $Global:PTS_Window.FindName("SidebarPanel")
+    HeaderEyebrow    = $Global:PTS_Window.FindName("HeaderEyebrow")
+    HeaderTitle      = $Global:PTS_Window.FindName("HeaderTitle")
+    HeaderSubtitle   = $Global:PTS_Window.FindName("HeaderSubtitle")
+    BackBtn          = $Global:PTS_Window.FindName("BackBtn")
+    FooterStatus     = $Global:PTS_Window.FindName("FooterStatus")
+    DarkModeToggle   = $Global:PTS_Window.FindName("DarkModeToggle")
+    HeaderBorder     = $Global:PTS_Window.FindName("HeaderBorder")
+    FooterBorder     = $Global:PTS_Window.FindName("FooterBorder")
 }
+
+# Dark mode toggle handler
+$Global:PTS_UI.DarkModeToggle.Add_Click({
+    $isDark = $Global:PTS_UI.DarkModeToggle.IsChecked
+    Apply-PTSTheme -DarkMode $isDark
+})
 
 # Track active sidebar button (Global)
 $Global:PTS_ActiveSidebarBtn = $null
