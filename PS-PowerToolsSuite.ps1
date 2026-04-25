@@ -413,16 +413,16 @@ function Set-SidebarActive {
     param($Btn, $Label)
     # Reset previous
     if ($script:ActiveSidebarBtn -ne $null) {
-        $script:ActiveSidebarBtn.Background  = $script:Brush["SidebarBg"]
-        $script:ActiveSidebarLabel.Foreground = $script:Brush["SidebarText"]
+        $script:ActiveSidebarBtn.Background   = $Global:PTS_Brush["SidebarBg"]
+        $script:ActiveSidebarLabel.Foreground = $Global:PTS_Brush["SidebarText"]
         $script:ActiveSidebarLabel.FontWeight = "Normal"
     }
     # Set new
     $script:ActiveSidebarBtn   = $Btn
     $script:ActiveSidebarLabel = $Label
-    $Btn.Background    = $script:Brush["SidebarActive"]
-    $Label.Foreground  = $script:Brush["SidebarTextActive"]
-    $Label.FontWeight  = "SemiBold"
+    $Btn.Background   = $Global:PTS_Brush["SidebarActive"]
+    $Label.Foreground = $Global:PTS_Brush["SidebarTextActive"]
+    $Label.FontWeight = "SemiBold"
 }
 
 # ===========================================================================
@@ -452,7 +452,7 @@ function Build-Sidebar {
         $btn = New-Object System.Windows.Controls.Button
         $btn.Height              = 52
         $btn.BorderThickness     = "0"
-        $btn.Background          = $script:Brush["SidebarBg"]
+        $btn.Background          = $Global:PTS_Brush["SidebarBg"]
         $btn.HorizontalContentAlignment = "Stretch"
         $btn.VerticalContentAlignment   = "Stretch"
         $btn.Cursor              = "Hand"
@@ -468,7 +468,7 @@ function Build-Sidebar {
 
         $label = New-Object System.Windows.Controls.TextBlock
         $label.Text              = $displayName
-        $label.Foreground        = $script:Brush["SidebarText"]
+        $label.Foreground        = $Global:PTS_Brush["SidebarText"]
         $label.FontSize          = 13
         $label.FontWeight        = "Normal"
         $label.VerticalAlignment = "Center"
@@ -484,7 +484,7 @@ function Build-Sidebar {
 
         $countText = New-Object System.Windows.Controls.TextBlock
         $countText.Text      = "$modCount"
-        $countText.Foreground = $script:Brush["SidebarText"]
+        $countText.Foreground = $Global:PTS_Brush["SidebarText"]
         $countText.FontSize  = 10
         $countText.FontWeight = "SemiBold"
         $countBadge.Child    = $countText
@@ -508,30 +508,33 @@ function Build-Sidebar {
         $templateReader = New-Object System.Xml.XmlNodeReader $templateXml
         $btn.Template = [Windows.Markup.XamlReader]::Load($templateReader)
 
-        # Events
-        $capturedBtn    = $btn
-        $capturedLabel  = $label
-        $capturedCount  = $countText
-        $capturedBadge  = $countBadge
-        $capturedName   = $displayName
+        # Capture brush values before closure — $script:Brush null in event scope
+        $capturedBtn        = $btn
+        $capturedLabel      = $label
+        $capturedCount      = $countText
+        $capturedBadge      = $countBadge
+        $capturedName       = $displayName
+        $brushHover         = $Global:PTS_Brush["SidebarHover"]
+        $brushBg            = $Global:PTS_Brush["SidebarBg"]
+        $brushActiveText    = $Global:PTS_Brush["SidebarTextActive"]
+        $brushActiveBadge   = New-Brush "#2F4AC2"
 
         $btn.Add_MouseEnter({
             if ($script:ActiveSidebarBtn -ne $capturedBtn) {
-                $capturedBtn.Background = $script:Brush["SidebarHover"]
+                $capturedBtn.Background = $brushHover
             }
         }.GetNewClosure())
 
         $btn.Add_MouseLeave({
             if ($script:ActiveSidebarBtn -ne $capturedBtn) {
-                $capturedBtn.Background = $script:Brush["SidebarBg"]
+                $capturedBtn.Background = $brushBg
             }
         }.GetNewClosure())
 
         $btn.Add_Click({
             Set-SidebarActive -Btn $capturedBtn -Label $capturedLabel
-            # Active badge style
-            $capturedBadge.Background = New-Brush "#2F4AC2"
-            $capturedCount.Foreground = $script:Brush["SidebarTextActive"]
+            $capturedBadge.Background = $brushActiveBadge
+            $capturedCount.Foreground = $brushActiveText
             Show-CategoryView -DisplayName $capturedName
         }.GetNewClosure())
 
@@ -540,7 +543,7 @@ function Build-Sidebar {
         # Divider between items
         $div            = New-Object System.Windows.Controls.Border
         $div.Height     = 1
-        $div.Background = $script:Brush["SidebarDivider"]
+        $div.Background = $Global:PTS_Brush["SidebarDivider"]
         $script:UI.SidebarPanel.Children.Add($div) | Out-Null
     }
 }
@@ -611,7 +614,7 @@ function Show-CategoryView {
 
         # Category badge
         $catBadge               = New-Object System.Windows.Controls.Border
-        $catBadge.Background    = $script:Brush["Primary"]
+        $catBadge.Background    = $Global:PTS_Brush["Primary"]
         $catBadge.CornerRadius  = New-Object System.Windows.CornerRadius(4,4,4,4)
         $catBadge.Padding       = "8,3,8,3"
         $catBadge.Margin        = "0,0,0,8"
@@ -619,7 +622,7 @@ function Show-CategoryView {
 
         $badgeText          = New-Object System.Windows.Controls.TextBlock
         $badgeText.Text     = $DisplayName.ToUpper()
-        $badgeText.Foreground = $script:Brush["Surface"]
+        $badgeText.Foreground = $Global:PTS_Brush["Surface"]
         $badgeText.FontSize = 9
         $badgeText.FontWeight = "Bold"
         $catBadge.Child     = $badgeText
@@ -628,7 +631,7 @@ function Show-CategoryView {
         # Module name
         $tbl              = New-Object System.Windows.Controls.TextBlock
         $tbl.Text         = $mod.Name
-        $tbl.Foreground   = $script:Brush["TextDark"]
+        $tbl.Foreground   = $Global:PTS_Brush["TextDark"]
         $tbl.FontSize     = 15
         $tbl.FontWeight   = "SemiBold"
         $tbl.Margin       = "0,0,0,6"
@@ -638,7 +641,7 @@ function Show-CategoryView {
         # Description
         $dbl              = New-Object System.Windows.Controls.TextBlock
         $dbl.Text         = $mod.Description
-        $dbl.Foreground   = $script:Brush["TextMuted"]
+        $dbl.Foreground   = $Global:PTS_Brush["TextMuted"]
         $dbl.FontSize     = 12
         $dbl.TextWrapping = "Wrap"
         $dbl.LineHeight   = 17
@@ -648,7 +651,7 @@ function Show-CategoryView {
         if ($mod.RequiresAdmin) {
             $adm            = New-Object System.Windows.Controls.TextBlock
             $adm.Text       = "REQUIRES ADMIN"
-            $adm.Foreground = $script:Brush["Warning"]
+            $adm.Foreground = $Global:PTS_Brush["Warning"]
             $adm.FontSize   = 9
             $adm.FontWeight = "Bold"
             $adm.Margin     = "0,10,0,0"
