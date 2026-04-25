@@ -54,23 +54,51 @@ $script:RootPath    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $script:ModulesPath = Join-Path $script:RootPath "modules"
 
 # ===========================================================================
+# CATEGORY DISPLAY NAME MAP
+# Maps internal category strings (from module files) to sidebar display names
+# ===========================================================================
+$script:CategoryDisplayNames = @{
+    "Diagnostics"    = "Diagnostics"
+    "Downloads"      = "Downloader"
+    "Performance"    = "Gaming Performance"
+    "Security"       = "Security"
+    "Windows Tweaks" = "Windows Tools"
+}
+
+# Sidebar order: alphabetical by display name
+$script:CategoryOrder = @(
+    "Diagnostics",
+    "Downloader",
+    "Gaming Performance",
+    "Security",
+    "Windows Tools"
+)
+
+# ===========================================================================
 # SHARED THEME / BRUSH CACHE
 # ===========================================================================
 $script:Theme = @{
-    Primary   = "#3B5BDB"
-    Background= "#F4F6FB"
-    Surface   = "#FFFFFF"
-    Border    = "#D0D6F0"
-    TextDark  = "#1A1F3A"
-    TextMid   = "#4A5280"
-    TextMuted = "#8890B8"
-    TextFaint = "#B0B8D8"
-    Success   = "#2A9D5C"
-    Danger    = "#C0392B"
-    Warning   = "#D9822B"
-    LogBg     = "#FAFBFF"
-    LogBorder = "#D8DEFA"
-    Divider   = "#E0E5F5"
+    Primary           = "#3B5BDB"
+    PrimaryDark       = "#2F4AC2"
+    SidebarBg         = "#1A2254"
+    SidebarDivider    = "#232D6B"
+    SidebarHover      = "#2A3470"
+    SidebarActive     = "#3B5BDB"
+    SidebarText       = "#A8B4E8"
+    SidebarTextActive = "#FFFFFF"
+    Background        = "#F4F6FB"
+    Surface           = "#FFFFFF"
+    Border            = "#D0D6F0"
+    TextDark          = "#1A1F3A"
+    TextMid           = "#4A5280"
+    TextMuted         = "#8890B8"
+    TextFaint         = "#B0B8D8"
+    Success           = "#2A9D5C"
+    Danger            = "#C0392B"
+    Warning           = "#D9822B"
+    LogBg             = "#FAFBFF"
+    LogBorder         = "#D8DEFA"
+    Divider           = "#E0E5F5"
 }
 
 function New-Brush {
@@ -83,10 +111,8 @@ function New-Brush {
 $script:Brush = @{}
 foreach ($k in $script:Theme.Keys) { $script:Brush[$k] = New-Brush $script:Theme[$k] }
 
-# Expose as Global vars so module-side event handlers resolve them reliably
 $Global:PTS_Brush = $script:Brush
 
-# Public accessors for modules (Global scope so module event handlers can find them)
 function Global:Get-PowerToolsBrush { param([string]$Name) return $Global:PTS_Brush[$Name] }
 function Global:Get-PowerToolsWindow { return $Global:PTS_Window }
 
@@ -98,8 +124,8 @@ function Global:Get-PowerToolsWindow { return $Global:PTS_Window }
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     Title="PowerTools Suite"
-    Width="980" Height="720"
-    MinWidth="860" MinHeight="640"
+    Width="1060" Height="720"
+    MinWidth="900" MinHeight="600"
     WindowStartupLocation="CenterScreen"
     Background="#F4F6FB"
     FontFamily="Segoe UI">
@@ -197,57 +223,120 @@ function Global:Get-PowerToolsWindow { return $Global:PTS_Window }
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="4"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
+        <!-- Top accent bar -->
         <Rectangle Grid.Row="0" Fill="#3B5BDB"/>
 
-        <Grid Grid.Row="1" Margin="36,22,36,18">
+        <!-- Main layout: sidebar + content -->
+        <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="200"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
-            <Button x:Name="BackBtn"
-                    Grid.Column="0"
-                    Content="Back to Menu"
-                    Style="{StaticResource SecondaryButton}"
-                    Padding="12,8" FontSize="12"
-                    Visibility="Collapsed" Margin="0,0,16,0"/>
+            <!-- ═══ LEFT SIDEBAR ═══ -->
+            <Grid Grid.Column="0" Background="#1A2254">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
 
-            <StackPanel Grid.Column="1">
-                <TextBlock x:Name="HeaderEyebrow"
-                           Text="POWERTOOLS SUITE"
-                           Foreground="#3B5BDB" FontSize="11" FontWeight="Bold"
-                           Margin="0,0,0,4"/>
-                <TextBlock x:Name="HeaderTitle"
-                           Text="Utility Launcher"
-                           Foreground="#1A1F3A" FontSize="22" FontWeight="SemiBold"/>
-                <TextBlock x:Name="HeaderSubtitle"
-                           Text="Select a tool to get started"
-                           Foreground="#8890B8" FontSize="13" Margin="0,4,0,0"/>
-            </StackPanel>
+                <!-- Sidebar title -->
+                <Border Grid.Row="0" Padding="20,20,20,16">
+                    <StackPanel>
+                        <TextBlock Text="POWERTOOLS"
+                                   Foreground="#3B5BDB" FontSize="10" FontWeight="Bold"
+                                   Margin="0,0,0,2"/>
+                        <TextBlock Text="Suite"
+                                   Foreground="#FFFFFF" FontSize="18" FontWeight="SemiBold"/>
+                    </StackPanel>
+                </Border>
+
+                <!-- Sidebar top divider -->
+                <Border Grid.Row="1" Height="1" Background="#232D6B"/>
+
+                <!-- Nav items -->
+                <StackPanel x:Name="SidebarPanel" Grid.Row="2" Margin="0,8,0,0"/>
+            </Grid>
+
+            <!-- ═══ RIGHT CONTENT ═══ -->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <!-- Content header -->
+                <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#E0E5F5"
+                        BorderThickness="0,0,0,1" Padding="28,16,28,14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+
+                        <Button x:Name="BackBtn"
+                                Grid.Column="0"
+                                Content="Back"
+                                Style="{StaticResource SecondaryButton}"
+                                Padding="12,8" FontSize="12"
+                                Visibility="Collapsed" Margin="0,0,16,0"/>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                            <TextBlock x:Name="HeaderEyebrow"
+                                       Text="POWERTOOLS SUITE"
+                                       Foreground="#3B5BDB" FontSize="10" FontWeight="Bold"
+                                       Margin="0,0,0,3"/>
+                            <TextBlock x:Name="HeaderTitle"
+                                       Text="Select a category"
+                                       Foreground="#1A1F3A" FontSize="20" FontWeight="SemiBold"/>
+                            <TextBlock x:Name="HeaderSubtitle"
+                                       Text="Choose a tool to get started"
+                                       Foreground="#8890B8" FontSize="12" Margin="0,3,0,0"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Scrollable tile area -->
+                <ScrollViewer Grid.Row="1"
+                              x:Name="ContentScroller"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled"
+                              Background="#F4F6FB">
+                    <ContentControl x:Name="ContentHost" Margin="28,24,28,24"/>
+                </ScrollViewer>
+            </Grid>
         </Grid>
 
-        <Border Grid.Row="2" Margin="0,0,0,14">
-            <ContentControl x:Name="ContentHost"/>
-        </Border>
-
-        <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#E0E5F5" BorderThickness="0,1,0,0">
-            <Grid Margin="36,10,36,10">
+        <!-- Footer -->
+        <Border Grid.Row="2" Background="#FFFFFF" BorderBrush="#E0E5F5" BorderThickness="0,1,0,0">
+            <Grid>
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="200"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
+
                 <TextBlock Grid.Column="0"
-                           Text="PowerTools Suite v1.1  |  Running as Administrator"
-                           Foreground="#B0B8D8" FontSize="11" VerticalAlignment="Center"/>
+                           Text="v1.1  |  Administrator"
+                           Foreground="#A8B4E8" FontSize="11" FontWeight="SemiBold"
+                           VerticalAlignment="Center" Margin="20,10,0,10"
+                           Background="#1A2254"/>
+
+                <TextBlock Grid.Column="1"
+                           Text="PowerTools Suite  |  ReAlNoMo"
+                           Foreground="#B0B8D8" FontSize="11"
+                           VerticalAlignment="Center" Margin="20,10,0,10"/>
+
                 <TextBlock x:Name="FooterStatus"
-                           Grid.Column="1"
+                           Grid.Column="2"
                            Text="Ready"
-                           Foreground="#8890B8" FontSize="11" VerticalAlignment="Center"/>
+                           Foreground="#8890B8" FontSize="11"
+                           VerticalAlignment="Center" Margin="0,10,20,10"/>
             </Grid>
         </Border>
     </Grid>
@@ -259,13 +348,19 @@ $script:Window = [Windows.Markup.XamlReader]::Load($reader)
 $Global:PTS_Window = $script:Window
 
 $script:UI = @{
-    ContentHost    = $script:Window.FindName("ContentHost")
-    HeaderEyebrow  = $script:Window.FindName("HeaderEyebrow")
-    HeaderTitle    = $script:Window.FindName("HeaderTitle")
-    HeaderSubtitle = $script:Window.FindName("HeaderSubtitle")
-    BackBtn        = $script:Window.FindName("BackBtn")
-    FooterStatus   = $script:Window.FindName("FooterStatus")
+    ContentHost     = $script:Window.FindName("ContentHost")
+    ContentScroller = $script:Window.FindName("ContentScroller")
+    SidebarPanel    = $script:Window.FindName("SidebarPanel")
+    HeaderEyebrow   = $script:Window.FindName("HeaderEyebrow")
+    HeaderTitle     = $script:Window.FindName("HeaderTitle")
+    HeaderSubtitle  = $script:Window.FindName("HeaderSubtitle")
+    BackBtn         = $script:Window.FindName("BackBtn")
+    FooterStatus    = $script:Window.FindName("FooterStatus")
 }
+
+# Track active sidebar button
+$script:ActiveSidebarBtn      = $null
+$script:ActiveSidebarLabel    = $null
 
 # ===========================================================================
 # MODULE REGISTRY
@@ -300,15 +395,8 @@ if (Test-Path $script:ModulesPath) {
 }
 
 # ===========================================================================
-# NAVIGATION
-#
-# FIX: Show-ModuleView is defined FIRST, then stored as a script-scoped
-# variable. Show-MainMenu captures that variable in each button closure
-# instead of referencing the function by name. This avoids the
-# "cmdlet not recognized" error that occurred when closures were created
-# before the function was parsed.
+# HELPERS
 # ===========================================================================
-
 function Set-Header {
     param([string]$Eyebrow, [string]$Title, [string]$Subtitle)
     $script:UI.HeaderEyebrow.Text  = $Eyebrow
@@ -321,17 +409,158 @@ function Set-FooterStatus {
     $script:UI.FooterStatus.Text = $Text
 }
 
-# --- Define Show-ModuleView BEFORE Show-MainMenu ---
+function Set-SidebarActive {
+    param($Btn, $Label)
+    # Reset previous
+    if ($script:ActiveSidebarBtn -ne $null) {
+        $script:ActiveSidebarBtn.Background  = $script:Brush["SidebarBg"]
+        $script:ActiveSidebarLabel.Foreground = $script:Brush["SidebarText"]
+        $script:ActiveSidebarLabel.FontWeight = "Normal"
+    }
+    # Set new
+    $script:ActiveSidebarBtn   = $Btn
+    $script:ActiveSidebarLabel = $Label
+    $Btn.Background    = $script:Brush["SidebarActive"]
+    $Label.Foreground  = $script:Brush["SidebarTextActive"]
+    $Label.FontWeight  = "SemiBold"
+}
+
+# ===========================================================================
+# SIDEBAR BUILDER
+# ===========================================================================
+function Build-Sidebar {
+    $script:UI.SidebarPanel.Children.Clear()
+
+    # Collect display names present in loaded modules
+    $presentDisplayNames = $Global:PTS_Modules | ForEach-Object {
+        $raw = $_.Category
+        if ($script:CategoryDisplayNames.ContainsKey($raw)) { $script:CategoryDisplayNames[$raw] }
+        else { $raw }
+    } | Select-Object -Unique
+
+    $orderedCategories = $script:CategoryOrder | Where-Object { $presentDisplayNames -contains $_ }
+
+    foreach ($displayName in $orderedCategories) {
+        # Module count for this category
+        $internalKey = $script:CategoryDisplayNames.GetEnumerator() |
+            Where-Object { $_.Value -eq $displayName } |
+            Select-Object -ExpandProperty Key -First 1
+        if (-not $internalKey) { $internalKey = $displayName }
+        $modCount = ($Global:PTS_Modules | Where-Object { $_.Category -eq $internalKey }).Count
+
+        # Sidebar button (manual control template for full color control)
+        $btn = New-Object System.Windows.Controls.Button
+        $btn.Height              = 52
+        $btn.BorderThickness     = "0"
+        $btn.Background          = $script:Brush["SidebarBg"]
+        $btn.HorizontalContentAlignment = "Stretch"
+        $btn.VerticalContentAlignment   = "Stretch"
+        $btn.Cursor              = "Hand"
+        $btn.Tag                 = $displayName
+
+        # Button content: label + count badge in a horizontal row
+        $rowPanel = New-Object System.Windows.Controls.Grid
+        $rowPanel.Margin = "20,0,16,0"
+        $c1 = New-Object System.Windows.Controls.ColumnDefinition; $c1.Width = "*"
+        $c2 = New-Object System.Windows.Controls.ColumnDefinition; $c2.Width = "Auto"
+        $rowPanel.ColumnDefinitions.Add($c1)
+        $rowPanel.ColumnDefinitions.Add($c2)
+
+        $label = New-Object System.Windows.Controls.TextBlock
+        $label.Text              = $displayName
+        $label.Foreground        = $script:Brush["SidebarText"]
+        $label.FontSize          = 13
+        $label.FontWeight        = "Normal"
+        $label.VerticalAlignment = "Center"
+        [System.Windows.Controls.Grid]::SetColumn($label, 0)
+        $rowPanel.Children.Add($label) | Out-Null
+
+        $countBadge = New-Object System.Windows.Controls.Border
+        $countBadge.Background   = New-Brush "#232D6B"
+        $countBadge.CornerRadius = New-Object System.Windows.CornerRadius(10,10,10,10)
+        $countBadge.Padding      = "7,2,7,2"
+        $countBadge.VerticalAlignment = "Center"
+        [System.Windows.Controls.Grid]::SetColumn($countBadge, 1)
+
+        $countText = New-Object System.Windows.Controls.TextBlock
+        $countText.Text      = "$modCount"
+        $countText.Foreground = $script:Brush["SidebarText"]
+        $countText.FontSize  = 10
+        $countText.FontWeight = "SemiBold"
+        $countBadge.Child    = $countText
+        $rowPanel.Children.Add($countBadge) | Out-Null
+
+        $btn.Content = $rowPanel
+
+        # Build custom control template for sidebar button
+        $btnTemplatePT = [System.Windows.Controls.ControlTemplate]::new([System.Windows.Controls.Button])
+        $borderFactory = [System.Windows.FrameworkElementFactory]::new([System.Windows.Controls.Border])
+        $borderFactory.SetBinding(
+            [System.Windows.Controls.Border]::BackgroundProperty,
+            [System.Windows.Data.Binding]::new("Background") | ForEach-Object { $_.RelativeSource = [System.Windows.Data.RelativeSource]::new([System.Windows.Data.RelativeSourceMode]::TemplatedParent); $_ }
+        )
+        $borderFactory.SetValue([System.Windows.Controls.Border]::PaddingProperty, [System.Windows.Thickness]::new(0,0,0,0))
+        $cpFactory = [System.Windows.FrameworkElementFactory]::new([System.Windows.Controls.ContentPresenter])
+        $cpFactory.SetValue([System.Windows.Controls.ContentPresenter]::VerticalAlignmentProperty, [System.Windows.VerticalAlignment]::Center)
+        $borderFactory.AppendChild($cpFactory)
+        $btnTemplatePT.VisualTree = $borderFactory
+        $btn.Template = $btnTemplatePT
+
+        # Events
+        $capturedBtn    = $btn
+        $capturedLabel  = $label
+        $capturedCount  = $countText
+        $capturedBadge  = $countBadge
+        $capturedName   = $displayName
+
+        $btn.Add_MouseEnter({
+            if ($script:ActiveSidebarBtn -ne $capturedBtn) {
+                $capturedBtn.Background = $script:Brush["SidebarHover"]
+            }
+        }.GetNewClosure())
+
+        $btn.Add_MouseLeave({
+            if ($script:ActiveSidebarBtn -ne $capturedBtn) {
+                $capturedBtn.Background = $script:Brush["SidebarBg"]
+            }
+        }.GetNewClosure())
+
+        $btn.Add_Click({
+            Set-SidebarActive -Btn $capturedBtn -Label $capturedLabel
+            # Active badge style
+            $capturedBadge.Background = New-Brush "#2F4AC2"
+            $capturedCount.Foreground = $script:Brush["SidebarTextActive"]
+            Show-CategoryView -DisplayName $capturedName
+        }.GetNewClosure())
+
+        $script:UI.SidebarPanel.Children.Add($btn) | Out-Null
+
+        # Divider between items
+        $div            = New-Object System.Windows.Controls.Border
+        $div.Height     = 1
+        $div.Background = $script:Brush["SidebarDivider"]
+        $script:UI.SidebarPanel.Children.Add($div) | Out-Null
+    }
+}
+
+# ===========================================================================
+# NAVIGATION
+# ===========================================================================
 function Show-ModuleView {
     param([Parameter(Mandatory)]$Module)
 
-    Set-Header -Eyebrow $Module.Category.ToUpper() -Title $Module.Name -Subtitle $Module.Description
+    $displayName = if ($script:CategoryDisplayNames.ContainsKey($Module.Category)) {
+        $script:CategoryDisplayNames[$Module.Category]
+    } else { $Module.Category }
+
+    Set-Header -Eyebrow $displayName.ToUpper() -Title $Module.Name -Subtitle $Module.Description
     $script:UI.BackBtn.Visibility = "Visible"
     Set-FooterStatus "Module: $($Module.Id)"
 
     try {
         $view = & $Module.Show
         $script:UI.ContentHost.Content = $view
+        $script:UI.ContentScroller.ScrollToTop()
     }
     catch {
         [System.Windows.MessageBox]::Show(
@@ -340,138 +569,112 @@ function Show-ModuleView {
             [System.Windows.MessageBoxButton]::OK,
             [System.Windows.MessageBoxImage]::Error
         ) | Out-Null
-        Show-MainMenu
+        if ($script:ActiveSidebarBtn -ne $null) {
+            Show-CategoryView -DisplayName ($script:ActiveSidebarBtn.Tag)
+        }
     }
 }
 
-# Store function reference AFTER definition
 $script:NavShowModuleView = Get-Item -Path "function:Show-ModuleView"
 
-# --- Now define Show-MainMenu which references the stored var ---
-function Show-MainMenu {
-    Set-Header -Eyebrow "POWERTOOLS SUITE" -Title "Utility Launcher" -Subtitle "Select a tool to get started"
+function Show-CategoryView {
+    param([string]$DisplayName)
+
+    $internalKey = $script:CategoryDisplayNames.GetEnumerator() |
+        Where-Object { $_.Value -eq $DisplayName } |
+        Select-Object -ExpandProperty Key -First 1
+    if (-not $internalKey) { $internalKey = $DisplayName }
+
+    $modules = $Global:PTS_Modules | Where-Object { $_.Category -eq $internalKey } | Sort-Object Name
+
+    Set-Header -Eyebrow $DisplayName.ToUpper() `
+               -Title $DisplayName `
+               -Subtitle "$($modules.Count) tool(s) in this category"
     $script:UI.BackBtn.Visibility = "Collapsed"
-    Set-FooterStatus "Ready"
+    Set-FooterStatus "Category: $DisplayName"
 
-    $scroll = New-Object System.Windows.Controls.ScrollViewer
-    $scroll.VerticalScrollBarVisibility   = "Auto"
-    $scroll.HorizontalScrollBarVisibility = "Disabled"
-    $scroll.Padding = "0,4,0,4"
+    $wrap             = New-Object System.Windows.Controls.WrapPanel
+    $wrap.Orientation = "Horizontal"
 
-    $mainStack = New-Object System.Windows.Controls.StackPanel
-    $mainStack.Orientation = "Vertical"
-    $mainStack.Margin = "0,0,0,0"
+    foreach ($mod in $modules) {
+        $btn = New-Object System.Windows.Controls.Button
+        $btn.Style  = $script:Window.FindResource("TileButton")
+        $btn.Width  = 280
+        $btn.Height = 150
+        $btn.Margin = "0,0,16,16"
+        $btn.HorizontalContentAlignment = "Stretch"
+        $btn.VerticalContentAlignment   = "Stretch"
 
-    # Group modules by category
-    $categories = $Global:PTS_Modules | Group-Object -Property Category | Sort-Object Name
+        $stack = New-Object System.Windows.Controls.StackPanel
 
-    foreach ($cat in $categories) {
-        # Category Header
-        $catHeader = New-Object System.Windows.Controls.Border
-        $catHeader.Height = 50
-        $catHeader.Background = $script:Brush["Primary"]
-        $catHeader.Padding = "36,0,36,0"
-        $catHeader.Margin = "0,16,0,8"
+        # Category badge
+        $catBadge               = New-Object System.Windows.Controls.Border
+        $catBadge.Background    = $script:Brush["Primary"]
+        $catBadge.CornerRadius  = New-Object System.Windows.CornerRadius(4,4,4,4)
+        $catBadge.Padding       = "8,3,8,3"
+        $catBadge.Margin        = "0,0,0,8"
+        $catBadge.HorizontalAlignment = "Left"
 
-        $catText = New-Object System.Windows.Controls.TextBlock
-        $catText.Text = $cat.Name.ToUpper()
-        $catText.Foreground = $script:Brush["Surface"]
-        $catText.FontSize = 13
-        $catText.FontWeight = "SemiBold"
-        $catText.VerticalAlignment = "Center"
-        $catHeader.Child = $catText
-        $mainStack.Children.Add($catHeader) | Out-Null
+        $badgeText          = New-Object System.Windows.Controls.TextBlock
+        $badgeText.Text     = $DisplayName.ToUpper()
+        $badgeText.Foreground = $script:Brush["Surface"]
+        $badgeText.FontSize = 9
+        $badgeText.FontWeight = "Bold"
+        $catBadge.Child     = $badgeText
+        $stack.Children.Add($catBadge) | Out-Null
 
-        # Tiles for category
-        $wrap = New-Object System.Windows.Controls.WrapPanel
-        $wrap.Orientation = "Horizontal"
-        $wrap.Margin = "36,0,36,0"
-        $wrap.HorizontalAlignment = "Left"
+        # Module name
+        $tbl              = New-Object System.Windows.Controls.TextBlock
+        $tbl.Text         = $mod.Name
+        $tbl.Foreground   = $script:Brush["TextDark"]
+        $tbl.FontSize     = 15
+        $tbl.FontWeight   = "SemiBold"
+        $tbl.Margin       = "0,0,0,6"
+        $tbl.TextWrapping = "Wrap"
+        $stack.Children.Add($tbl) | Out-Null
 
-        foreach ($mod in $cat.Group | Sort-Object Name) {
-            $btn = New-Object System.Windows.Controls.Button
-            $btn.Style  = $script:Window.FindResource("TileButton")
-            $btn.Width  = 280
-            $btn.Height = 140
-            $btn.Margin = "0,0,16,16"
-            $btn.HorizontalContentAlignment = "Stretch"
-            $btn.VerticalContentAlignment   = "Stretch"
+        # Description
+        $dbl              = New-Object System.Windows.Controls.TextBlock
+        $dbl.Text         = $mod.Description
+        $dbl.Foreground   = $script:Brush["TextMuted"]
+        $dbl.FontSize     = 12
+        $dbl.TextWrapping = "Wrap"
+        $dbl.LineHeight   = 17
+        $stack.Children.Add($dbl) | Out-Null
 
-            $stack = New-Object System.Windows.Controls.StackPanel
-
-            # Category badge (small, colored)
-            $catBadge = New-Object System.Windows.Controls.Border
-            $catBadge.Background = $script:Brush["Primary"]
-            $catBadge.CornerRadius = New-Object System.Windows.CornerRadius(4,4,4,4)
-            $catBadge.Padding = "8,3,8,3"
-            $catBadge.Width = 80
-            $catBadge.Margin = "0,0,0,6"
-            $catBadge.HorizontalAlignment = "Left"
-
-            $badgeText = New-Object System.Windows.Controls.TextBlock
-            $badgeText.Text = $mod.Category.ToUpper()
-            $badgeText.Foreground = $script:Brush["Surface"]
-            $badgeText.FontSize = 9
-            $badgeText.FontWeight = "Bold"
-            $catBadge.Child = $badgeText
-            $stack.Children.Add($catBadge) | Out-Null
-
-            # Module name
-            $tbl = New-Object System.Windows.Controls.TextBlock
-            $tbl.Text = $mod.Name
-            $tbl.Foreground = $script:Brush["TextDark"]
-            $tbl.FontSize = 15
-            $tbl.FontWeight = "SemiBold"
-            $tbl.Margin = "0,0,0,6"
-            $tbl.TextWrapping = "Wrap"
-            $stack.Children.Add($tbl) | Out-Null
-
-            # Description
-            $dbl = New-Object System.Windows.Controls.TextBlock
-            $dbl.Text = $mod.Description
-            $dbl.Foreground = $script:Brush["TextMuted"]
-            $dbl.FontSize = 12
-            $dbl.TextWrapping = "Wrap"
-            $dbl.LineHeight = 17
-            $stack.Children.Add($dbl) | Out-Null
-
-            # Admin indicator (if needed)
-            if ($mod.RequiresAdmin) {
-                $adm = New-Object System.Windows.Controls.TextBlock
-                $adm.Text = "REQUIRES ADMIN"
-                $adm.Foreground = $script:Brush["Warning"]
-                $adm.FontSize = 9
-                $adm.FontWeight = "Bold"
-                $adm.Margin = "0,8,0,0"
-                $stack.Children.Add($adm) | Out-Null
-            }
-
-            $btn.Content = $stack
-
-            $capturedMod = $mod
-            $capturedNav = $script:NavShowModuleView
-            $btn.Add_Click({
-                & $capturedNav -Module $capturedMod
-            }.GetNewClosure())
-
-            $wrap.Children.Add($btn) | Out-Null
+        # Admin badge
+        if ($mod.RequiresAdmin) {
+            $adm            = New-Object System.Windows.Controls.TextBlock
+            $adm.Text       = "REQUIRES ADMIN"
+            $adm.Foreground = $script:Brush["Warning"]
+            $adm.FontSize   = 9
+            $adm.FontWeight = "Bold"
+            $adm.Margin     = "0,10,0,0"
+            $stack.Children.Add($adm) | Out-Null
         }
 
-        $mainStack.Children.Add($wrap) | Out-Null
+        $btn.Content = $stack
 
-        # Separator line
-        $sep = New-Object System.Windows.Controls.Border
-        $sep.Height = 1
-        $sep.Background = $script:Brush["Divider"]
-        $sep.Margin = "0,12,0,0"
-        $mainStack.Children.Add($sep) | Out-Null
+        $capturedMod = $mod
+        $capturedNav = $script:NavShowModuleView
+        $btn.Add_Click({
+            & $capturedNav -Module $capturedMod
+        }.GetNewClosure())
+
+        $wrap.Children.Add($btn) | Out-Null
     }
 
-    $scroll.Content = $mainStack
-    $script:UI.ContentHost.Content = $scroll
+    $script:UI.ContentHost.Content = $wrap
+    $script:UI.ContentScroller.ScrollToTop()
 }
 
-$script:UI.BackBtn.Add_Click({ Show-MainMenu })
+# Back = return to active category view
+$script:UI.BackBtn.Add_Click({
+    if ($script:ActiveSidebarBtn -ne $null) {
+        Show-CategoryView -DisplayName ($script:ActiveSidebarBtn.Tag)
+    }
+    $script:UI.BackBtn.Visibility = "Collapsed"
+})
 
 # ===========================================================================
 # LAUNCH
@@ -486,5 +689,17 @@ if ($Global:PTS_Modules.Count -eq 0) {
     exit 1
 }
 
-Show-MainMenu
+Build-Sidebar
+
+# Auto-select first sidebar category on launch
+$firstBtn = $script:UI.SidebarPanel.Children |
+    Where-Object { $_ -is [System.Windows.Controls.Button] } |
+    Select-Object -First 1
+
+if ($firstBtn) {
+    $firstBtn.RaiseEvent(
+        [System.Windows.RoutedEventArgs]::new([System.Windows.Controls.Button]::ClickEvent)
+    )
+}
+
 $script:Window.ShowDialog() | Out-Null
