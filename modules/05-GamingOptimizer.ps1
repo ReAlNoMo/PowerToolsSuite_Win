@@ -10,20 +10,17 @@ Register-PowerToolsModule `
     -Show          {
 
     [xml]$viewXaml = @"
-<ScrollViewer xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-              VerticalScrollBarVisibility="Auto"
-              HorizontalScrollBarVisibility="Disabled">
-    <Grid>
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
-        </Grid.RowDefinitions>
+<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
 
     <!-- ROW 0: Hardware Info + Recommended Tools -->
     <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#D0D6F0"
@@ -98,9 +95,9 @@ Register-PowerToolsModule `
                 Style="{DynamicResource SecondaryButton}" Padding="10,5" FontSize="11"/>
     </Grid>
 
-    <!-- ROW 3: TWEAK LIST (scrollable) -->
+    <!-- ROW 3: TWEAK LIST - plain ItemsControl, no nested ScrollViewer -->
     <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#D0D6F0"
-            BorderThickness="1.5" CornerRadius="8" MinHeight="300" Margin="0,0,0,6">
+            BorderThickness="1.5" CornerRadius="8" Margin="0,0,0,6">
         <ItemsControl x:Name="TweakList" Margin="6,6,6,6"/>
     </Border>
 
@@ -135,9 +132,9 @@ Register-PowerToolsModule `
                 Style="{DynamicResource SecondaryButton}" Height="40" FontSize="11"/>
     </Grid>
 
-    <!-- ROW 6: Activity Log -->
+    <!-- ROW 6: Activity Log (fixed height) -->
     <Border Grid.Row="6" Background="#FAFBFF" BorderBrush="#D8DEFA"
-            BorderThickness="1.5" CornerRadius="8">
+            BorderThickness="1.5" CornerRadius="8" Height="140">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -161,8 +158,7 @@ Register-PowerToolsModule `
             </ScrollViewer>
         </Grid>
     </Border>
-    </Grid>
-</ScrollViewer>
+</Grid>
 "@
 
     $win    = Get-PowerToolsWindow
@@ -209,13 +205,11 @@ Register-PowerToolsModule `
         $script:GO_logScroller.Dispatcher.Invoke([action]{ $script:GO_logScroller.ScrollToEnd() })
     }
 
-    # Registry Helpers
     function Global:GO-GetReg  { param($p,$n) try { (Get-ItemProperty -Path $p -Name $n -EA Stop).$n } catch { $null } }
     function Global:GO-SetDW   { param($p,$n,$v) if(-not(Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name $n -Value $v -Type DWord -Force }
     function Global:GO-SetStr  { param($p,$n,$v) if(-not(Test-Path $p)){New-Item -Path $p -Force|Out-Null}; Set-ItemProperty -Path $p -Name $n -Value $v -Type String -Force }
     function Global:GO-DelReg  { param($p,$n) try { Remove-ItemProperty -Path $p -Name $n -Force -EA Stop } catch {} }
 
-    # Hardware Detection
     function Global:GO-DetectHardware {
         $cpu = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
         $gpu = (Get-CimInstance Win32_VideoController | Where-Object { $_.Name -notmatch "Basic|Virtual" } | Select-Object -First 1).Name
@@ -230,7 +224,6 @@ Register-PowerToolsModule `
         if ($build -ge 26100)  { $text += "`n[i] Windows 11 24H2+ - Native NVMe Stack available" }
 
         $script:GO_hwText.Text = $text
-
         return @{
             CPU=$cpu; GPU=$gpu; RAMGB=$ramGB; Build=$build
             IsX3D=$isX3D; IsIntel12Plus=$isIntel12Plus; IsAMDRyzen5000Plus=$isAMDRyzen5000Plus
@@ -239,25 +232,17 @@ Register-PowerToolsModule `
 
     $script:GO_hw = GO-DetectHardware
 
-    # Profile detection logic - what gets pre-selected based on hardware
     function Global:GO-IsRecommended {
         param($TweakId)
-        # High-impact, safe tweaks always recommended
         $alwaysRecommended = @(1,2,3,4,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,25,26,27,28)
         if ($alwaysRecommended -contains $TweakId) { return $true }
-        # X3D-specific: keep Xbox services active
         if ($script:GO_hw.IsX3D -and $TweakId -eq 5) { return $false }
-        # NVMe stack only on Win11 24H2+
         if ($TweakId -eq 24 -and $script:GO_hw.Build -lt 26100) { return $false }
         if ($TweakId -eq 24 -and $script:GO_hw.Build -ge 26100) { return $true }
         return $false
     }
 
-    # TWEAKS DEFINITION
-    # Risk: 0=Safe 1=Moderate 2=High
-    # NeedsReboot, Group, Label, ShortDesc, LongDesc, FPSGain, Category (for mutex groups)
     $script:GO_tweaks = @(
-        # ==================== BLOCK 1: SECURITY / HIGH IMPACT ====================
         @{ Id=1; Group="Security - High Impact"; Risk=1; NeedsReboot=$true;
            Label="Memory Integrity / HVCI (OFF)";
            ShortDesc="Disables Hypervisor-Protected Code Integrity. Biggest FPS gainer. Validates kernel drivers via hypervisor.";
@@ -271,39 +256,35 @@ Register-PowerToolsModule `
 
         @{ Id=2; Group="Security - High Impact"; Risk=1; NeedsReboot=$true;
            Label="Disable VBS / Virtual Machine Platform";
-           ShortDesc="Disables Hyper-V hypervisor base. Uses CPU cycles even without active VMs. Eliminates VBS overhead.";
-           LongDesc="Virtual Machine Platform is the Hyper-V hypervisor base. It consumes CPU cycles even without active VMs. Disabling yields 2-5% additional CPU performance and fully eliminates VBS overhead. Risk: WSL2, Hyper-V, Docker will not work. Ideal for pure gaming PC without VM needs.";
-           FPSGain="2-5% FPS";
-           Check={ (bcdedit /enum "{current}" | Select-String "hypervisorlaunchtype\s+Off") -ne $null };
-           Apply={ bcdedit /set hypervisorlaunchtype off | Out-Null
-                   try { Disable-WindowsOptionalFeature -Online -FeatureName VirtualMachinePlatform -NoRestart -EA SilentlyContinue | Out-Null } catch {} };
-           Revert={ bcdedit /set hypervisorlaunchtype auto | Out-Null } }
+           ShortDesc="Disables Virtualization-Based Security. Prerequisite for HVCI disable. Big FPS unlock.";
+           LongDesc="Virtualization-Based Security creates an isolated hypervisor environment. Prerequisite for HVCI. Disabling yields additional 2-8% FPS. Risk: Same as HVCI - reduced kernel protection. Acceptable for gaming-only machines.";
+           FPSGain="2-8% FPS";
+           Check={ (GO-GetReg "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" "EnableVirtualizationBasedSecurity") -eq 0 };
+           Apply={ GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" "EnableVirtualizationBasedSecurity" 0 };
+           Revert={ GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Control\DeviceGuard" "EnableVirtualizationBasedSecurity" 1 } }
 
-        @{ Id=3; Group="Security - High Impact"; Risk=0; NeedsReboot=$false;
+        @{ Id=3; Group="Security - High Impact"; Risk=0; NeedsReboot=$true;
            Label="GameDVR / Xbox Recording (OFF)";
-           ShortDesc="Disables Xbox Game Bar background recording. Runs even when not actively used. Reduces GPU/CPU overhead.";
-           LongDesc="Xbox Game Bar runs background recording even when not actively used. Disabling reduces GPU/CPU overhead and prevents uncontrolled FPS drops. Note: Clip function is lost - irrelevant for gaming PC without streaming.";
-           FPSGain="1-2% FPS";
-           Check={ (GO-GetReg "HKCU:\System\GameConfigStore" "GameDVR_Enabled") -eq 0 -and (GO-GetReg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" "AllowGameDVR") -eq 0 };
+           ShortDesc="Disables Xbox Game Bar DVR recording. Frees GPU/CPU resources during gameplay.";
+           LongDesc="Xbox Game Bar DVR captures gameplay in background consuming GPU and CPU resources. Disabling yields 2-5% FPS in GPU-limited scenarios. No risk - only removes screen recording. Manual screenshots still work.";
+           FPSGain="2-5% FPS";
+           Check={ (GO-GetReg "HKCU:\System\GameConfigStore" "GameDVR_Enabled") -eq 0 };
            Apply={ GO-SetDW "HKCU:\System\GameConfigStore" "GameDVR_Enabled" 0
-                   GO-SetDW "HKCU:\System\GameConfigStore" "GameDVR_FSEBehavior" 2
                    GO-SetDW "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" "AllowGameDVR" 0 };
            Revert={ GO-SetDW "HKCU:\System\GameConfigStore" "GameDVR_Enabled" 1
-                    GO-DelReg "HKCU:\System\GameConfigStore" "GameDVR_FSEBehavior"
                     GO-DelReg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\GameDVR" "AllowGameDVR" } }
 
         @{ Id=4; Group="Security - High Impact"; Risk=2; NeedsReboot=$true;
            Label="Spectre/Meltdown Mitigations (OFF) - HIGH RISK";
-           ShortDesc="HIGH RISK. Disables CPU security patches. Only for isolated gaming PC without sensitive data. Yields 5-10% FPS.";
-           LongDesc="CRITICAL WARNING: Disables CPU security patches for Spectre/Meltdown vulnerabilities. These patches cause 5-10% performance loss (especially Intel pre-10th Gen). Yields 5-10% FPS gain, noticeable in syscall-heavy systems. Extreme Risk: Side-channel attacks become possible. Only use on isolated gaming PC without sensitive browsing or banking.";
-           FPSGain="5-10% FPS (old CPUs)";
+           ShortDesc="Disables CPU vulnerability mitigations. +5-15% FPS on older CPUs. SECURITY RISK.";
+           LongDesc="Spectre and Meltdown mitigations protect against CPU-level attacks. Disabling yields 5-15% FPS on older CPUs (Intel 6-9th gen), less on modern CPUs. HIGH RISK: Only on isolated gaming PCs without browser or sensitive data access. Not recommended.";
+           FPSGain="5-15% FPS";
            Check={ (GO-GetReg "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" "FeatureSettingsOverride") -eq 3 };
            Apply={ GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" "FeatureSettingsOverride" 3
                    GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" "FeatureSettingsOverrideMask" 3 };
            Revert={ GO-DelReg "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" "FeatureSettingsOverride"
                     GO-DelReg "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" "FeatureSettingsOverrideMask" } }
 
-        # ==================== BLOCK 2: POWER / CPU ====================
         @{ Id=5; Group="Power / CPU"; Risk=0; NeedsReboot=$false;
            Label="Ultimate Performance Power Plan";
            ShortDesc="Activates hidden Ultimate Performance plan. Disables core parking. Sets min CPU clock to 100%.";
@@ -327,7 +308,7 @@ Register-PowerToolsModule `
         @{ Id=7; Group="Power / CPU"; Risk=0; NeedsReboot=$false;
            Label="System Responsiveness = 10";
            ShortDesc="Controls CPU share for multimedia/foreground apps. More CPU cycles for active applications.";
-           LongDesc="Controls CPU share for multimedia and foreground applications. Default is 20. Value 10 is moderate and recommended for stability. Value 0 is maximally aggressive but can severely impair background services.";
+           LongDesc="Controls CPU share for multimedia and foreground applications. Default is 20. Value 10 is moderate and recommended for stability.";
            FPSGain="1-2% FPS";
            Check={ (GO-GetReg "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" "SystemResponsiveness") -eq 10 };
            Apply={ GO-SetDW "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" "SystemResponsiveness" 10 };
@@ -336,7 +317,7 @@ Register-PowerToolsModule `
         @{ Id=8; Group="Power / CPU"; Risk=0; NeedsReboot=$false;
            Label="Network Throttling Disabled";
            ShortDesc="Removes network throughput limit. Better network latency and throughput.";
-           LongDesc="Windows limits network throughput to save CPU. Disabling improves network latency and throughput. Risk: On weak connections possible jitter. On Gigabit no problem.";
+           LongDesc="Windows limits network throughput to save CPU. Disabling improves network latency and throughput.";
            FPSGain="Latency";
            Check={ (GO-GetReg "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" "NetworkThrottlingIndex") -eq 0xFFFFFFFF };
            Apply={ GO-SetDW "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile" "NetworkThrottlingIndex" 0xFFFFFFFF };
@@ -345,7 +326,7 @@ Register-PowerToolsModule `
         @{ Id=9; Group="Power / CPU"; Risk=0; NeedsReboot=$false; Mutex="PrioritySep";
            Label="Win32PrioritySeparation = 36 (Competitive)";
            ShortDesc="Short variable quanta without focus boost. Minimal scheduling latency. Best for competitive shooters.";
-           LongDesc="Controls CPU time quanta per process before context switch. Value 36 (0x24) uses short variable quanta without focus boost - minimal scheduling latency. Best for competitive shooters. Background tasks much slower. Conflicts with value 24 option.";
+           LongDesc="Controls CPU time quanta per process before context switch. Value 36 (0x24) uses short variable quanta without focus boost - minimal scheduling latency. Best for competitive shooters.";
            FPSGain="1-3% FPS";
            Check={ (GO-GetReg "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" "Win32PrioritySeparation") -eq 0x24 };
            Apply={ GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" "Win32PrioritySeparation" 0x24 };
@@ -354,7 +335,7 @@ Register-PowerToolsModule `
         @{ Id=10; Group="Power / CPU"; Risk=0; NeedsReboot=$false; Mutex="PrioritySep";
            Label="Win32PrioritySeparation = 24 (AAA Games)";
            ShortDesc="Long fixed quanta (server mode). Maximum consistency for games with many background threads.";
-           LongDesc="Value 24 (0x18) uses long fixed quanta in server mode - maximum consistency for AAA games with many background threads. Better for open-world and simulation titles. Conflicts with value 36 option.";
+           LongDesc="Value 24 (0x18) uses long fixed quanta in server mode - maximum consistency for AAA games with many background threads.";
            FPSGain="1-3% FPS";
            Check={ (GO-GetReg "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" "Win32PrioritySeparation") -eq 0x18 };
            Apply={ GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Control\PriorityControl" "Win32PrioritySeparation" 0x18 };
@@ -363,17 +344,16 @@ Register-PowerToolsModule `
         @{ Id=11; Group="Power / CPU"; Risk=0; NeedsReboot=$false;
            Label="Startup Delay Disabled";
            ShortDesc="Removes artificial startup delay for autostart apps. Faster desktop after login.";
-           LongDesc="Windows artificially delays autostart apps after login. Disabling gives a faster desktop after login. Minimal risk.";
+           LongDesc="Windows artificially delays autostart apps after login. Disabling gives a faster desktop after login.";
            FPSGain="Boot speed";
            Check={ (GO-GetReg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" "StartupDelayInMSec") -eq 0 };
            Apply={ GO-SetDW "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" "StartupDelayInMSec" 0 };
            Revert={ GO-DelReg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Serialize" "StartupDelayInMSec" } }
 
-        # ==================== BLOCK 3: GRAPHICS / GAMING ====================
         @{ Id=12; Group="Graphics / Gaming"; Risk=0; NeedsReboot=$true;
            Label="Hardware-Accelerated GPU Scheduling (ON)";
            ShortDesc="GPU manages its own memory and tasks instead of CPU. Required for DLSS 3 Frame Generation.";
-           LongDesc="GPU takes over own memory and task management instead of CPU. Reduces system latency by ~2ms, more stable frametimes. Mandatory for DLSS 3 Frame Generation. Requires Nvidia 451.48+ or AMD 20.5.1+. On very old GPUs/drivers can cause stuttering.";
+           LongDesc="GPU takes over own memory and task management instead of CPU. Reduces system latency by ~2ms, more stable frametimes. Mandatory for DLSS 3 Frame Generation.";
            FPSGain="1-5% FPS";
            Check={ (GO-GetReg "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "HwSchMode") -eq 2 };
            Apply={ GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Control\GraphicsDrivers" "HwSchMode" 2 };
@@ -382,7 +362,7 @@ Register-PowerToolsModule `
         @{ Id=13; Group="Graphics / Gaming"; Risk=0; NeedsReboot=$false;
            Label="Windows Game Mode (ON)";
            ShortDesc="Prioritizes game threads. Pauses Windows updates during gaming. REQUIRED for AMD X3D CPUs.";
-           LongDesc="Prioritizes game threads and pauses Windows Update downloads during gaming. More stable FPS, fewer interruptions. CRITICAL: Must stay ON for AMD X3D chips (7800X3D, 7950X3D etc.). Communicates with AMD chipset driver for cache allocation. Disabling costs up to -15% FPS on X3D.";
+           LongDesc="Prioritizes game threads and pauses Windows Update downloads during gaming. CRITICAL: Must stay ON for AMD X3D chips.";
            FPSGain="1-5% FPS";
            Check={ (GO-GetReg "HKCU:\Software\Microsoft\GameBar" "AutoGameModeEnabled") -eq 1 };
            Apply={ GO-SetDW "HKCU:\Software\Microsoft\GameBar" "AutoGameModeEnabled" 1 };
@@ -391,7 +371,7 @@ Register-PowerToolsModule `
         @{ Id=14; Group="Graphics / Gaming"; Risk=0; NeedsReboot=$false;
            Label="Windowed Game Optimizations (Flip Model)";
            ShortDesc="Modern flip presentation for DirectX 10/11 windowed games. Fullscreen latency in windowed mode.";
-           LongDesc="Modern flip presentation system for all DirectX 10/11 windowed games. Latency at fullscreen level, enables VRR/Auto-HDR in windowed mode. Rarely incompatibilities with older overlays.";
+           LongDesc="Modern flip presentation system for all DirectX 10/11 windowed games. Latency at fullscreen level, enables VRR/Auto-HDR in windowed mode.";
            FPSGain="Latency";
            Check={ (GO-GetReg "HKCU:\System\GameConfigStore" "GameDVR_FSEBehaviorMode") -eq 2 };
            Apply={ GO-SetDW "HKCU:\System\GameConfigStore" "GameDVR_FSEBehaviorMode" 2
@@ -402,17 +382,16 @@ Register-PowerToolsModule `
         @{ Id=15; Group="Graphics / Gaming"; Risk=0; NeedsReboot=$false;
            Label="Games Task Scheduling = High";
            ShortDesc="Sets Multimedia scheduler priority for games to High. More CPU cycles for gaming threads.";
-           LongDesc="Sets Multimedia scheduler priority for games to High. More CPU cycles for gaming threads. No negative side effects.";
+           LongDesc="Sets Multimedia scheduler priority for games to High. More CPU cycles for gaming threads.";
            FPSGain="1% FPS";
            Check={ (GO-GetReg "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" "Scheduling Category") -eq "High" };
            Apply={ GO-SetStr "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" "Scheduling Category" "High" };
            Revert={ GO-SetStr "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile\Tasks\Games" "Scheduling Category" "Medium" } }
 
-        # ==================== BLOCK 4: NETWORK ====================
         @{ Id=16; Group="Network"; Risk=1; NeedsReboot=$false;
            Label="Disable Nagle Algorithm";
-           ShortDesc="Bundles small TCP packets - artificially raises ping in real-time games. Disabling reduces ping 10-30ms.";
-           LongDesc="Nagle algorithm bundles small TCP packets, artificially raising ping in real-time games. Disabling yields immediate packet sending - 10-30ms ping reduction in online games. Risk: More packets, on weak connections possible overhead.";
+           ShortDesc="Bundles small TCP packets - artificially raises ping. Disabling reduces ping 10-30ms.";
+           LongDesc="Nagle algorithm bundles small TCP packets, artificially raising ping in real-time games. Disabling yields immediate packet sending - 10-30ms ping reduction.";
            FPSGain="-10-30ms ping";
            Check={
                $nics = Get-NetAdapter | Where-Object {$_.Status -eq "Up" -and $_.InterfaceType -eq 6}
@@ -444,7 +423,7 @@ Register-PowerToolsModule `
         @{ Id=17; Group="Network"; Risk=0; NeedsReboot=$false;
            Label="Advanced TCP Optimizations";
            ShortDesc="Enables RSS, disables RSC/ECN/timestamps. Better network throughput and latency.";
-           LongDesc="Multiple netsh optimizations: autotuning=normal (optimal throughput), RSS=enabled (multi-core network distribution), RSC=disabled (less latency), ECN=disabled (more stable ping), timestamps=disabled (less header overhead).";
+           LongDesc="Multiple netsh optimizations: autotuning=normal, RSS=enabled, RSC=disabled, ECN=disabled, timestamps=disabled.";
            FPSGain="Latency";
            Check={ (netsh int tcp show global | Select-String "Receive Segment Coalescing.*disabled") -ne $null };
            Apply={
@@ -462,11 +441,10 @@ Register-PowerToolsModule `
                netsh int tcp set global timestamps=default | Out-Null
            } }
 
-        # ==================== BLOCK 5: UI / VISUAL ====================
         @{ Id=18; Group="UI / Visual"; Risk=0; NeedsReboot=$false;
            Label="Transparency Effects (OFF)";
            ShortDesc="Disables Windows transparency effects. Less GPU overhead for UI.";
-           LongDesc="Windows transparency effects (Acrylic, Mica) consume GPU resources. Disabling yields minimal FPS gain but reduces UI overhead. No functional loss.";
+           LongDesc="Windows transparency effects consume GPU resources. Disabling yields minimal FPS gain but reduces UI overhead.";
            FPSGain="0-1% FPS";
            Check={ (GO-GetReg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" "EnableTransparency") -eq 0 };
            Apply={ GO-SetDW "HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize" "EnableTransparency" 0 };
@@ -475,7 +453,7 @@ Register-PowerToolsModule `
         @{ Id=19; Group="UI / Visual"; Risk=0; NeedsReboot=$false;
            Label="Window Animations (OFF)";
            ShortDesc="Disables window minimize/maximize animations. Snappier UI response.";
-           LongDesc="Disables window animations for minimize/maximize. Snappier UI response. Zero impact on games, purely desktop.";
+           LongDesc="Disables window animations for minimize/maximize. Snappier UI response.";
            FPSGain="UI speed";
            Check={ (GO-GetReg "HKCU:\Control Panel\Desktop\WindowMetrics" "MinAnimate") -eq "0" };
            Apply={ GO-SetStr "HKCU:\Control Panel\Desktop\WindowMetrics" "MinAnimate" "0" };
@@ -484,7 +462,7 @@ Register-PowerToolsModule `
         @{ Id=20; Group="UI / Visual"; Risk=0; NeedsReboot=$false;
            Label="Menu Show Delay = 0";
            ShortDesc="Removes menu open delay. Instant menu response.";
-           LongDesc="Windows has a default 400ms menu show delay. Setting to 0 gives instant menu response. Zero risk.";
+           LongDesc="Windows has a default 400ms menu show delay. Setting to 0 gives instant menu response.";
            FPSGain="UI speed";
            Check={ (GO-GetReg "HKCU:\Control Panel\Desktop" "MenuShowDelay") -eq "0" };
            Apply={ GO-SetStr "HKCU:\Control Panel\Desktop" "MenuShowDelay" "0" };
@@ -493,17 +471,16 @@ Register-PowerToolsModule `
         @{ Id=21; Group="UI / Visual"; Risk=0; NeedsReboot=$false;
            Label="Taskbar Animations (OFF)";
            ShortDesc="Disables taskbar animations. Snappier taskbar response.";
-           LongDesc="Disables taskbar animations. Snappier response when hovering or clicking taskbar. Zero impact on games.";
+           LongDesc="Disables taskbar animations. Snappier response when hovering or clicking taskbar.";
            FPSGain="UI speed";
            Check={ (GO-GetReg "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "TaskbarAnimations") -eq 0 };
            Apply={ GO-SetDW "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "TaskbarAnimations" 0 };
            Revert={ GO-SetDW "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Advanced" "TaskbarAnimations" 1 } }
 
-        # ==================== BLOCK 6: FILESYSTEM ====================
         @{ Id=22; Group="Filesystem / Storage"; Risk=0; NeedsReboot=$false;
            Label="NTFS Disable Last Access Time";
            ShortDesc="Windows writes timestamp on every read. Reduces SSD writes. Extends SSD lifespan.";
-           LongDesc="Windows writes a timestamp on every read access. Disabling reduces I/O operations and extends SSD lifespan. No negative side effects.";
+           LongDesc="Disabling reduces I/O operations and extends SSD lifespan. No negative side effects.";
            FPSGain="SSD life";
            Check={ (fsutil behavior query disablelastaccess) -match "= 1" };
            Apply={ fsutil behavior set disablelastaccess 1 | Out-Null };
@@ -512,7 +489,7 @@ Register-PowerToolsModule `
         @{ Id=23; Group="Filesystem / Storage"; Risk=0; NeedsReboot=$false;
            Label="NTFS Disable 8.3 Filenames";
            ShortDesc="Disables DOS-compatible short names. Faster directory listing of large game folders.";
-           LongDesc="Windows creates DOS-compatible short filenames for every file - slows directory listing. Disabling gives faster listing of large game folders (thousands of files). Very old DOS programs might fail - irrelevant for gaming PC.";
+           LongDesc="Disabling gives faster listing of large game folders.";
            FPSGain="Dir listing";
            Check={ (fsutil behavior query disable8dot3) -match "= 1" };
            Apply={ fsutil behavior set disable8dot3 1 | Out-Null };
@@ -521,7 +498,7 @@ Register-PowerToolsModule `
         @{ Id=24; Group="Filesystem / Storage"; Risk=1; NeedsReboot=$true;
            Label="Native NVMe Stack (Win11 24H2+)";
            ShortDesc="Bypasses SCSI translation. Up to 45% less CPU per I/O. EXPERIMENTAL. Only Win11 24H2+.";
-           LongDesc="Bypasses SCSI translation layer for direct native NVMe driver. Yields up to 45% less CPU per I/O operation, up to 80% more IOPS. EXPERIMENTAL. Only on Build 26100+ (24H2). SSD management tools may detect drive twice.";
+           LongDesc="Bypasses SCSI translation layer for direct native NVMe driver. EXPERIMENTAL. Only on Build 26100+.";
            FPSGain="SSD speed";
            Check={ (GO-GetReg "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" "1176759950") -eq 1 };
            Apply={ GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Policies\Microsoft\FeatureManagement\Overrides" "1176759950" 1 };
@@ -536,11 +513,10 @@ Register-PowerToolsModule `
            Apply={ GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" "DisablePagingExecutive" 1 };
            Revert={ GO-SetDW "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Memory Management" "DisablePagingExecutive" 0 } }
 
-        # ==================== BLOCK 7: PRIVACY / TELEMETRY ====================
         @{ Id=26; Group="Privacy / Telemetry"; Risk=1; NeedsReboot=$false;
            Label="Disable Telemetry";
            ShortDesc="Disables Windows telemetry. Stops data collection to Microsoft.";
-           LongDesc="Disables Windows telemetry and DiagTrack service. Stops data collection to Microsoft. Risk: Not officially supported. Find My Device and Insider features limited.";
+           LongDesc="Disables Windows telemetry and DiagTrack service. Risk: Not officially supported.";
            FPSGain="Privacy";
            Check={ (GO-GetReg "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry") -eq 0 };
            Apply={ GO-SetDW "HKLM:\SOFTWARE\Policies\Microsoft\Windows\DataCollection" "AllowTelemetry" 0
@@ -552,7 +528,7 @@ Register-PowerToolsModule `
         @{ Id=27; Group="Privacy / Telemetry"; Risk=0; NeedsReboot=$false;
            Label="Search History (OFF)";
            ShortDesc="Disables device search history tracking. Privacy improvement.";
-           LongDesc="Disables device search history tracking by Windows Search. Privacy improvement. No negative effects on search functionality.";
+           LongDesc="Disables device search history tracking by Windows Search.";
            FPSGain="Privacy";
            Check={ (GO-GetReg "HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings" "IsDeviceSearchHistoryEnabled") -eq 0 };
            Apply={ GO-SetDW "HKCU:\Software\Microsoft\Windows\CurrentVersion\SearchSettings" "IsDeviceSearchHistoryEnabled" 0 };
@@ -567,11 +543,10 @@ Register-PowerToolsModule `
            Apply={ GO-SetDW "HKCU:\Software\Microsoft\Windows\CurrentVersion\CDP" "CdpSessionUserAuthzPolicy" 0 };
            Revert={ GO-SetDW "HKCU:\Software\Microsoft\Windows\CurrentVersion\CDP" "CdpSessionUserAuthzPolicy" 1 } }
 
-        # ==================== BLOCK 8: LIGHTING ====================
         @{ Id=29; Group="Dynamic Lighting"; Risk=0; NeedsReboot=$false;
            Label="Dynamic Lighting (OFF)";
            ShortDesc="Disables Windows 11 Dynamic Lighting for RGB peripherals. Use vendor software instead.";
-           LongDesc="Disables Windows 11 Dynamic Lighting for RGB peripherals. Allows vendor software (Razer Synapse, Logitech G Hub, Corsair iCUE) to control RGB without conflicts.";
+           LongDesc="Disables Windows 11 Dynamic Lighting for RGB peripherals. Allows vendor software to control RGB without conflicts.";
            FPSGain="Compatibility";
            Check={ (GO-GetReg "HKCU:\Software\Microsoft\Lighting" "AmbientLightingEnabled") -eq 0 };
            Apply={ GO-SetDW "HKCU:\Software\Microsoft\Lighting" "AmbientLightingEnabled" 0
@@ -692,8 +667,7 @@ Register-PowerToolsModule `
             </ScrollViewer>
         </Border>
         <Button Grid.Row="4" x:Name="DetailCloseBtn" Content="Close"
-                Height="38"
-                Padding="20,6" HorizontalAlignment="Right" Margin="0,14,0,0"/>
+                Height="38" Padding="20,6" HorizontalAlignment="Right" Margin="0,14,0,0"/>
     </Grid>
 </Window>
 "@
@@ -703,13 +677,13 @@ Register-PowerToolsModule `
         $dw.Resources.Add("PrimaryButton",   (Get-PowerToolsWindow).FindResource("PrimaryButton"))
         $dw.Owner = Get-PowerToolsWindow
 
-        $dw.FindName("DetailCategory").Text = $Tweak.Group.ToUpper()
-        $dw.FindName("DetailTitle").Text    = $Tweak.Label
-        $dw.FindName("DetailRisk").Text     = GO-GetRiskLabel $Tweak.Risk
-        $dw.FindName("DetailRisk").Foreground = GO-GetRiskColor $Tweak.Risk
-        $dw.FindName("DetailGain").Text     = $Tweak.FPSGain
-        $dw.FindName("DetailReboot").Text   = if ($Tweak.NeedsReboot) { "Yes" } else { "No" }
-        $dw.FindName("DetailLongDesc").Text = $Tweak.LongDesc
+        $dw.FindName("DetailCategory").Text  = $Tweak.Group.ToUpper()
+        $dw.FindName("DetailTitle").Text     = $Tweak.Label
+        $dw.FindName("DetailRisk").Text      = GO-GetRiskLabel $Tweak.Risk
+        $dw.FindName("DetailRisk").Foreground= GO-GetRiskColor $Tweak.Risk
+        $dw.FindName("DetailGain").Text      = $Tweak.FPSGain
+        $dw.FindName("DetailReboot").Text    = if ($Tweak.NeedsReboot) { "Yes" } else { "No" }
+        $dw.FindName("DetailLongDesc").Text  = $Tweak.LongDesc
         $detailClose = $dw.FindName("DetailCloseBtn")
         if ($detailClose) { $detailClose.Style = $dw.FindResource("SecondaryButton") }
         $capturedDw = $dw
@@ -732,7 +706,6 @@ Register-PowerToolsModule `
                 $hdr.FontSize   = 9
                 $hdr.FontWeight = "Bold"
                 $hdr.Margin     = "8,10,8,2"
-                # Add separator line before group (except first)
                 if ($lastGroup -ne "") {
                     $sep = New-Object System.Windows.Controls.Separator
                     $sep.Margin = "8,4,8,0"
@@ -762,14 +735,13 @@ Register-PowerToolsModule `
             $cb.Tag         = $t.Id
             $cb.ToolTip     = $t.ShortDesc
 
-            # Make checkbox content a clickable textblock for detail view
             $cbText = New-Object System.Windows.Controls.TextBlock
-            $cbText.Text       = $t.Label
+            $cbText.Text         = $t.Label
             $cbText.TextWrapping = "NoWrap"
             $cbText.TextTrimming = "CharacterEllipsis"
-            $cbText.FontSize   = 12
-            $cbText.Cursor     = [System.Windows.Input.Cursors]::Hand
-            $cbText.Foreground = if ($isOk) { Get-PowerToolsBrush "TextMuted" } else { Get-PowerToolsBrush "TextDark" }
+            $cbText.FontSize     = 12
+            $cbText.Cursor       = [System.Windows.Input.Cursors]::Hand
+            $cbText.Foreground   = if ($isOk) { Get-PowerToolsBrush "TextMuted" } else { Get-PowerToolsBrush "TextDark" }
             $cbText.TextDecorations = [System.Windows.TextDecorations]::Underline
             $capturedTweak = $t
             $cbText.Add_MouseLeftButtonUp({
@@ -793,7 +765,6 @@ Register-PowerToolsModule `
             [System.Windows.Controls.Grid]::SetColumn($cb, 0)
             $row.Children.Add($cb) | Out-Null
 
-            # Status badge
             $lbl = New-Object System.Windows.Controls.TextBlock
             $lbl.Text       = if ($isOk) { "APPLIED" } else { "MISSING" }
             $lbl.Foreground = if ($isOk) { Get-PowerToolsBrush "Success" } else { Get-PowerToolsBrush "Warning" }
@@ -804,7 +775,6 @@ Register-PowerToolsModule `
             [System.Windows.Controls.Grid]::SetColumn($lbl, 1)
             $row.Children.Add($lbl) | Out-Null
 
-            # Risk badge
             $riskLbl = New-Object System.Windows.Controls.TextBlock
             $riskLbl.Text       = GO-GetRiskLabel $t.Risk
             $riskLbl.Foreground = GO-GetRiskColor $t.Risk
@@ -815,11 +785,9 @@ Register-PowerToolsModule `
             [System.Windows.Controls.Grid]::SetColumn($riskLbl, 2)
             $row.Children.Add($riskLbl) | Out-Null
 
-            # Add 5th column for reset button
             $c5 = New-Object System.Windows.Controls.ColumnDefinition; $c5.Width = "Auto"
             $row.ColumnDefinitions.Add($c5)
 
-            # Details button
             $detailBtn = New-Object System.Windows.Controls.Button
             $detailBtn.Content = "Details"
             $detailBtn.Style   = (Get-PowerToolsWindow).FindResource("SecondaryButton")
@@ -828,13 +796,10 @@ Register-PowerToolsModule `
             $detailBtn.Margin  = "4,0,4,0"
             $detailBtn.VerticalAlignment = "Center"
             $capturedTweak2 = $t
-            $detailBtn.Add_Click({
-                GO-ShowDetailWindow -Tweak $capturedTweak2
-            }.GetNewClosure())
+            $detailBtn.Add_Click({ GO-ShowDetailWindow -Tweak $capturedTweak2 }.GetNewClosure())
             [System.Windows.Controls.Grid]::SetColumn($detailBtn, 3)
             $row.Children.Add($detailBtn) | Out-Null
 
-            # Reset button (only shown when tweak is already applied)
             if ($isOk) {
                 $resetBtn = New-Object System.Windows.Controls.Button
                 $resetBtn.Content = "Reset"
@@ -850,7 +815,7 @@ Register-PowerToolsModule `
                 $capturedTweak3 = $t
                 $resetBtn.Add_Click({
                     $r = [System.Windows.MessageBox]::Show(
-                        "Reset '$($capturedTweak3.Label)' to Windows default?nThis reverts only this single tweak.",
+                        "Reset '$($capturedTweak3.Label)' to Windows default?`nThis reverts only this single tweak.",
                         "Confirm Reset",
                         [System.Windows.MessageBoxButton]::YesNo,
                         [System.Windows.MessageBoxImage]::Question)
@@ -871,7 +836,6 @@ Register-PowerToolsModule `
         GO-UpdateApplyState
     }
 
-    # Pre-selection based on hardware
     function Global:GO-ApplyRecommendedPreselection {
         foreach ($t in $script:GO_tweaks) {
             if ($script:GO_checkboxes.ContainsKey($t.Id) -and $script:GO_checkboxes[$t.Id].IsEnabled) {
@@ -883,7 +847,6 @@ Register-PowerToolsModule `
         GO-UpdateApplyState
     }
 
-    # Backup Functions
     function Global:GO-CreateBackup {
         param([string]$BackupDir)
         if (-not (Test-Path $BackupDir)) { New-Item -ItemType Directory -Path $BackupDir -Force | Out-Null }
@@ -914,7 +877,6 @@ Register-PowerToolsModule `
         }
     }
 
-    # Profile Save/Load
     function Global:GO-SaveProfile {
         $sfd = New-Object Microsoft.Win32.SaveFileDialog
         $sfd.Title = "Save Gaming Optimizer Profile"
@@ -927,7 +889,7 @@ Register-PowerToolsModule `
         foreach ($id in $script:GO_checkboxes.Keys) {
             if ($script:GO_checkboxes[$id].IsChecked -eq $true) { $selected += $id }
         }
-        $profile = @{
+        $profileData = @{
             Version = "2.0"
             Created = (Get-Date).ToString("o")
             Hardware = @{
@@ -944,7 +906,7 @@ Register-PowerToolsModule `
             }
         }
         try {
-            $profile | ConvertTo-Json -Depth 5 | Out-File -FilePath $sfd.FileName -Encoding UTF8
+            $profileData | ConvertTo-Json -Depth 5 | Out-File -FilePath $sfd.FileName -Encoding UTF8
             GO-AddLog "Profile saved: $($sfd.FileName)" "OK"
         } catch { GO-AddLog "Save failed: $_" "FAIL" }
     }
@@ -957,29 +919,28 @@ Register-PowerToolsModule `
         if ($ofd.ShowDialog() -ne $true) { return }
 
         try {
-            $profile = Get-Content -Path $ofd.FileName -Raw | ConvertFrom-Json
+            $profileData = Get-Content -Path $ofd.FileName -Raw | ConvertFrom-Json
             foreach ($id in $script:GO_checkboxes.Keys) { $script:GO_checkboxes[$id].IsChecked = $false }
             $loaded = 0; $skipped = 0
-            foreach ($id in $profile.SelectedTweakIds) {
+            foreach ($id in $profileData.SelectedTweakIds) {
                 if ($script:GO_checkboxes.ContainsKey($id) -and $script:GO_checkboxes[$id].IsEnabled) {
                     $script:GO_checkboxes[$id].IsChecked = $true
                     $loaded++
                 } else { $skipped++ }
             }
-            if ($profile.Settings) {
-                $script:GO_cbRestore.IsChecked = $profile.Settings.CreateRestorePoint
-                $script:GO_cbRegBkp.IsChecked  = $profile.Settings.ExportRegistry
-                $script:GO_cbAutoReb.IsChecked = $profile.Settings.PromptReboot
+            if ($profileData.Settings) {
+                $script:GO_cbRestore.IsChecked = $profileData.Settings.CreateRestorePoint
+                $script:GO_cbRegBkp.IsChecked  = $profileData.Settings.ExportRegistry
+                $script:GO_cbAutoReb.IsChecked = $profileData.Settings.PromptReboot
             }
             GO-UpdateApplyState
-            GO-AddLog "Profile loaded. Applied: $loaded  Skipped (already set or N/A): $skipped" "OK"
-            if ($profile.Hardware) {
-                GO-AddLog "Profile was created on: $($profile.Hardware.CPU) / $($profile.Hardware.GPU)" "INFO"
+            GO-AddLog "Profile loaded. Applied: $loaded  Skipped: $skipped" "OK"
+            if ($profileData.Hardware) {
+                GO-AddLog "Profile created on: $($profileData.Hardware.CPU) / $($profileData.Hardware.GPU)" "INFO"
             }
         } catch { GO-AddLog "Load failed: $_" "FAIL" }
     }
 
-    # Software Info Window
     function Global:GO-ShowSoftwareInfo {
         [xml]$softXaml = @"
 <Window xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -1031,27 +992,27 @@ Register-PowerToolsModule `
                URL="https://www.wagnardsoft.com/"; Cost="Free" }
             @{ Name="Process Lasso"; Rec="High (Intel 12+ / AMD X3D)";
                What="CPU prioritization and core affinity per process. Automatic and persistent.";
-               Why="Moves background processes to E-cores (Intel) or second CCD (AMD), reserves P-cores for game. Free version sufficient.";
+               Why="Moves background processes to E-cores (Intel) or second CCD (AMD), reserves P-cores for game.";
                URL="https://bitsum.com/"; Cost="Free / Pro available" }
             @{ Name="NVCleanstall"; Rec="High (NVIDIA users)";
                What="Installs NVIDIA drivers without bloatware (GeForce Experience, telemetry, NVIDIA Container).";
-               Why="Fewer background processes, less RAM usage, cleaner driver stack. Use on every driver update.";
+               Why="Fewer background processes, less RAM usage, cleaner driver stack.";
                URL="https://www.techpowerup.com/nvcleanstall/"; Cost="Free" }
             @{ Name="TimerResolution / TimerTool"; Rec="High (Competitive)";
                What="Increases Windows timer resolution from default 15.6ms to 0.5ms.";
-               Why="More precise process scheduling, more stable frametimes especially in competitive shooters (CS2, Valorant, Apex).";
+               Why="More precise process scheduling, more stable frametimes especially in competitive shooters.";
                URL="https://www.lucashale.com/timer-resolution/"; Cost="Free" }
             @{ Name="DDU - Display Driver Uninstaller"; Rec="High";
                What="Complete driver removal without residue. Use before every driver update.";
-               Why="Prevents driver conflicts, stuttering from old driver remnants, micro-crashes. Run in Safe Mode.";
+               Why="Prevents driver conflicts, stuttering from old driver remnants, micro-crashes.";
                URL="https://www.wagnardsoft.com/"; Cost="Free" }
             @{ Name="MSI Afterburner + RTSS"; Rec="High (Competitive)";
                What="GPU monitoring and FPS limiter.";
-               Why="FPS limit to refresh rate -3 FPS reduces input lag significantly (144Hz -> limit 141 FPS). More stable than in-game VSync.";
+               Why="FPS limit to refresh rate -3 FPS reduces input lag significantly.";
                URL="https://www.msi.com/Landing/afterburner/"; Cost="Free" }
             @{ Name="O&O ShutUp10++"; Rec="Medium";
-               What="GUI tool for telemetry, privacy, and background processes - without registry knowledge.";
-               Why="Quick disabling of 50+ tracking/telemetry functions. Good for users without registry experience.";
+               What="GUI tool for telemetry, privacy, and background processes.";
+               Why="Quick disabling of 50+ tracking/telemetry functions.";
                URL="https://www.oo-software.com/en/shutup10"; Cost="Free" }
             @{ Name="InSpectre (Gibson Research)"; Rec="Medium";
                What="Shows status of all CPU security mitigations (Spectre, Meltdown, Downfall).";
@@ -1088,32 +1049,28 @@ Register-PowerToolsModule `
 
             $whatLbl = New-Object System.Windows.Controls.TextBlock
             $whatLbl.Text = "WHAT IT DOES"
-            $whatLbl.FontSize = 9
-            $whatLbl.FontWeight = "Bold"
+            $whatLbl.FontSize = 9; $whatLbl.FontWeight = "Bold"
             $whatLbl.Foreground = Get-PowerToolsBrush "TextMuted"
             $whatLbl.Margin = "0,0,0,2"
             $cardStack.Children.Add($whatLbl) | Out-Null
 
             $whatTxt = New-Object System.Windows.Controls.TextBlock
             $whatTxt.Text = $tool.What
-            $whatTxt.FontSize = 12
-            $whatTxt.TextWrapping = "Wrap"
+            $whatTxt.FontSize = 12; $whatTxt.TextWrapping = "Wrap"
             $whatTxt.Foreground = Get-PowerToolsBrush "TextDark"
             $whatTxt.Margin = "0,0,0,8"
             $cardStack.Children.Add($whatTxt) | Out-Null
 
             $whyLbl = New-Object System.Windows.Controls.TextBlock
             $whyLbl.Text = "WHY USE IT"
-            $whyLbl.FontSize = 9
-            $whyLbl.FontWeight = "Bold"
+            $whyLbl.FontSize = 9; $whyLbl.FontWeight = "Bold"
             $whyLbl.Foreground = Get-PowerToolsBrush "TextMuted"
             $whyLbl.Margin = "0,0,0,2"
             $cardStack.Children.Add($whyLbl) | Out-Null
 
             $whyTxt = New-Object System.Windows.Controls.TextBlock
             $whyTxt.Text = $tool.Why
-            $whyTxt.FontSize = 12
-            $whyTxt.TextWrapping = "Wrap"
+            $whyTxt.FontSize = 12; $whyTxt.TextWrapping = "Wrap"
             $whyTxt.Foreground = Get-PowerToolsBrush "TextDark"
             $whyTxt.Margin = "0,0,0,8"
             $cardStack.Children.Add($whyTxt) | Out-Null
@@ -1132,12 +1089,9 @@ Register-PowerToolsModule `
             $card.Child = $cardStack
             $stack.Children.Add($card) | Out-Null
         }
-
-        # SoftCloseBtn handled above
         $sw.Show()
     }
 
-    # Revert functionality
     function Global:GO-RevertAll {
         $res = [System.Windows.MessageBox]::Show(
             "Revert all tweaks to Windows default values?`n`nThis will reset ALL managed settings (applied or not) to Windows defaults.`n`nContinue?",
@@ -1175,12 +1129,10 @@ Register-PowerToolsModule `
         GO-RenderList
     }
 
-    # Render on load
     GO-RenderList
     GO-ApplyRecommendedPreselection
     GO-AddLog "Status check complete. Pre-selection applied based on detected hardware - please verify before applying." "INFO"
 
-    # Event handlers
     $script:GO_selAll.Add_Click({
         foreach ($id in $script:GO_checkboxes.Keys) {
             if ($script:GO_checkboxes[$id].IsEnabled) { $script:GO_checkboxes[$id].IsChecked = $true }
@@ -1229,7 +1181,6 @@ Register-PowerToolsModule `
         }
         if (-not $selected) { GO-AddLog "Nothing selected." "WARN"; return }
 
-        # High-risk warning
         $highRisk = $selected | Where-Object { $_.Risk -eq 2 }
         if ($highRisk) {
             $names = ($highRisk | ForEach-Object { $_.Label }) -join "`n- "
@@ -1241,7 +1192,6 @@ Register-PowerToolsModule `
             if ($r -ne [System.Windows.MessageBoxResult]::Yes) { GO-AddLog "Cancelled by user." "WARN"; return }
         }
 
-        # Backup
         if ($script:GO_cbRestore.IsChecked -or $script:GO_cbRegBkp.IsChecked) {
             $backupDir = Join-Path $env:USERPROFILE "Desktop\PowerToolsSuite_Backup"
             GO-CreateBackup -BackupDir $backupDir
