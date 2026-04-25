@@ -1,21 +1,30 @@
 # Module: Sandboxie Browser Launcher
-# Launches Chrome or Firefox inside a Sandboxie-Plus sandbox.
+# Launches Chrome, Firefox, Brave, Chromium, Vivaldi, LibreWolf inside Sandboxie-Plus.
 
 Register-PowerToolsModule `
     -Id          "sandboxie-launcher" `
     -Name        "Sandboxie Browser Launcher" `
-    -Description "Start Chrome or Firefox in Sandboxie-Plus with private/incognito mode." `
+    -Description "Start multiple browsers in Sandboxie-Plus with private/incognito mode." `
     -Category    "Security" `
     -Show        {
 
     $script:SBX_sandboxieExe = "C:\Program Files\Sandboxie-Plus\Start.exe"
-    $script:SBX_chromePath   = "C:\Program Files\Google\Chrome\Application\chrome.exe"
-    $script:SBX_firefoxPath  = "C:\Program Files\Mozilla Firefox\firefox.exe"
+    
+    $script:SBX_browsers = @(
+        @{ Name = "Google Chrome"; Path = "C:\Program Files\Google\Chrome\Application\chrome.exe"; PrivateArg = "--incognito"; Id = "chrome" }
+        @{ Name = "Mozilla Firefox"; Path = "C:\Program Files\Mozilla Firefox\firefox.exe"; PrivateArg = "-private-window"; Id = "firefox" }
+        @{ Name = "Brave"; Path = "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"; PrivateArg = "--incognito"; Id = "brave" }
+        @{ Name = "Chromium"; Path = "C:\Program Files\Chromium\Application\chromium.exe"; PrivateArg = "--incognito"; Id = "chromium" }
+        @{ Name = "Vivaldi"; Path = "C:\Program Files\Vivaldi\Application\vivaldi.exe"; PrivateArg = "--private"; Id = "vivaldi" }
+        @{ Name = "LibreWolf"; Path = "C:\Program Files\LibreWolf\librewolf.exe"; PrivateArg = "-private-window"; Id = "librewolf" }
+    )
 
     [xml]$viewXaml = @"
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
@@ -48,19 +57,39 @@ Register-PowerToolsModule `
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="12"/>
             <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="12"/>
+            <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
-        <Button Grid.Column="0" x:Name="ChromeBtn" Content="Launch Chrome (Incognito)"
+        <Button Grid.Column="0" x:Name="ChromeBtn" Content="Chrome (Incognito)"
                 Style="{DynamicResource PrimaryButton}" Height="50" FontSize="13"/>
-        <Button Grid.Column="2" x:Name="FirefoxBtn" Content="Launch Firefox (Private)"
+        <Button Grid.Column="2" x:Name="FirefoxBtn" Content="Firefox (Private)"
+                Style="{DynamicResource PrimaryButton}" Height="50" FontSize="13"/>
+        <Button Grid.Column="4" x:Name="BraveBtn" Content="Brave (Incognito)"
                 Style="{DynamicResource PrimaryButton}" Height="50" FontSize="13"/>
     </Grid>
 
-    <Border Grid.Row="3" Background="#FAFBFF" BorderBrush="#D8DEFA"
+    <Grid Grid.Row="3" Margin="0,0,0,14">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="12"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="12"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+        <Button Grid.Column="0" x:Name="ChromiumBtn" Content="Chromium (Incognito)"
+                Style="{DynamicResource PrimaryButton}" Height="50" FontSize="13"/>
+        <Button Grid.Column="2" x:Name="VivaldiBtn" Content="Vivaldi (Private)"
+                Style="{DynamicResource PrimaryButton}" Height="50" FontSize="13"/>
+        <Button Grid.Column="4" x:Name="LibreWolfBtn" Content="LibreWolf (Private)"
+                Style="{DynamicResource PrimaryButton}" Height="50" FontSize="13"/>
+    </Grid>
+
+    <Border Grid.Row="4" Background="#FAFBFF" BorderBrush="#D8DEFA"
             BorderThickness="1.5" CornerRadius="10" Padding="16,12" Margin="0,0,0,14">
         <TextBlock x:Name="StatusText" Foreground="#8890B8" FontSize="12" Text="Ready."/>
     </Border>
 
-    <Grid Grid.Row="4" Margin="0,0,0,8">
+    <Grid Grid.Row="5" Margin="0,0,0,8">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
@@ -71,7 +100,7 @@ Register-PowerToolsModule `
                 Style="{DynamicResource SecondaryButton}" Padding="12,6" FontSize="11"/>
     </Grid>
 
-    <Border Grid.Row="5" Background="#FAFBFF" BorderBrush="#D8DEFA"
+    <Border Grid.Row="6" Background="#FAFBFF" BorderBrush="#D8DEFA"
             BorderThickness="1.5" CornerRadius="10">
         <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
             <TextBlock x:Name="LogBox" Foreground="#8890B8"
@@ -95,11 +124,24 @@ Register-PowerToolsModule `
     $script:SBX_sandboxBox  = $view.FindName("SandboxBox")
     $script:SBX_chromeBtn   = $view.FindName("ChromeBtn")
     $script:SBX_firefoxBtn  = $view.FindName("FirefoxBtn")
+    $script:SBX_braveBtn    = $view.FindName("BraveBtn")
+    $script:SBX_chromiumBtn = $view.FindName("ChromiumBtn")
+    $script:SBX_vivaldiBtn  = $view.FindName("VivaldiBtn")
+    $script:SBX_librewolfBtn= $view.FindName("LibreWolfBtn")
     $script:SBX_statusText  = $view.FindName("StatusText")
     $script:SBX_clearLog    = $view.FindName("ClearLogBtn")
     $script:SBX_logBox      = $view.FindName("LogBox")
     $script:SBX_logScroller = $view.FindName("LogScroller")
     $script:SBX_initText    = "Ready."
+
+    $script:SBX_buttonMap = @{
+        "chrome"    = $script:SBX_chromeBtn
+        "firefox"   = $script:SBX_firefoxBtn
+        "brave"     = $script:SBX_braveBtn
+        "chromium"  = $script:SBX_chromiumBtn
+        "vivaldi"   = $script:SBX_vivaldiBtn
+        "librewolf" = $script:SBX_librewolfBtn
+    }
 
     function Global:SBX-AddLog {
         param([string]$Msg, [string]$Type = "INFO")
@@ -134,30 +176,54 @@ Register-PowerToolsModule `
 
     # Prerequisite check
     $hasSandboxie = Test-Path $script:SBX_sandboxieExe
-    $hasChrome    = Test-Path $script:SBX_chromePath
-    $hasFirefox   = Test-Path $script:SBX_firefoxPath
 
     $lines = @()
-    $lines += if ($hasSandboxie) {"[OK]  Sandboxie-Plus detected"} else {"[--]  Sandboxie-Plus NOT found: $($script:SBX_sandboxieExe)"}
-    $lines += if ($hasChrome)    {"[OK]  Google Chrome detected"}   else {"[--]  Google Chrome not found"}
-    $lines += if ($hasFirefox)   {"[OK]  Mozilla Firefox detected"} else {"[--]  Mozilla Firefox not found"}
+    $lines += if ($hasSandboxie) {"[OK]  Sandboxie-Plus detected"} else {"[--]  Sandboxie-Plus NOT found"}
+
+    foreach ($browser in $script:SBX_browsers) {
+        $detected = Test-Path $browser.Path
+        $status = if ($detected) { "[OK] " } else { "[--]" }
+        $lines += "$status $($browser.Name)"
+    }
+
     $script:SBX_prereqText.Text = $lines -join "`n"
 
     if (-not $hasSandboxie) {
-        $script:SBX_chromeBtn.IsEnabled  = $false
-        $script:SBX_firefoxBtn.IsEnabled = $false
+        foreach ($btn in $script:SBX_buttonMap.Values) {
+            $btn.IsEnabled = $false
+        }
         $script:SBX_prereqText.Foreground = Get-PowerToolsBrush "Danger"
     } else {
-        if (-not $hasChrome)  { $script:SBX_chromeBtn.IsEnabled  = $false }
-        if (-not $hasFirefox) { $script:SBX_firefoxBtn.IsEnabled = $false }
+        foreach ($browser in $script:SBX_browsers) {
+            $detected = Test-Path $browser.Path
+            if (-not $detected) {
+                $script:SBX_buttonMap[$browser.Id].IsEnabled = $false
+            }
+        }
     }
 
     $script:SBX_chromeBtn.Add_Click({
-        SBX-Launch -BrowserPath $script:SBX_chromePath -PrivateArg "--incognito" -BrowserName "Google Chrome"
+        SBX-Launch -BrowserPath "C:\Program Files\Google\Chrome\Application\chrome.exe" -PrivateArg "--incognito" -BrowserName "Google Chrome"
     })
 
     $script:SBX_firefoxBtn.Add_Click({
-        SBX-Launch -BrowserPath $script:SBX_firefoxPath -PrivateArg "-private-window" -BrowserName "Mozilla Firefox"
+        SBX-Launch -BrowserPath "C:\Program Files\Mozilla Firefox\firefox.exe" -PrivateArg "-private-window" -BrowserName "Mozilla Firefox"
+    })
+
+    $script:SBX_braveBtn.Add_Click({
+        SBX-Launch -BrowserPath "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" -PrivateArg "--incognito" -BrowserName "Brave"
+    })
+
+    $script:SBX_chromiumBtn.Add_Click({
+        SBX-Launch -BrowserPath "C:\Program Files\Chromium\Application\chromium.exe" -PrivateArg "--incognito" -BrowserName "Chromium"
+    })
+
+    $script:SBX_vivaldiBtn.Add_Click({
+        SBX-Launch -BrowserPath "C:\Program Files\Vivaldi\Application\vivaldi.exe" -PrivateArg "--private" -BrowserName "Vivaldi"
+    })
+
+    $script:SBX_librewolfBtn.Add_Click({
+        SBX-Launch -BrowserPath "C:\Program Files\LibreWolf\librewolf.exe" -PrivateArg "-private-window" -BrowserName "LibreWolf"
     })
 
     $script:SBX_clearLog.Add_Click({
