@@ -264,11 +264,11 @@ function Global:Get-PowerToolsWindow { return $Global:PTS_Window }
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
-                <Border Grid.Row="0" Padding="20,20,20,16">
+                <Border Grid.Row="0" Padding="20,20,20,12">
                     <StackPanel>
                         <TextBlock Text="POWERTOOLS"
-                                   Foreground="#3B5BDB" FontSize="14" FontWeight="Bold"
-                                   Margin="0,0,0,6"/>
+                                   Foreground="#3B5BDB" FontSize="28" FontWeight="Bold"
+                                   Margin="0,0,0,0"/>
                         <TextBlock Text="Suite"
                                    Foreground="#FFFFFF" FontSize="28" FontWeight="Bold"
                                    Margin="0,0,0,0"/>
