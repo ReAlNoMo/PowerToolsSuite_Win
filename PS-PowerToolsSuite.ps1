@@ -490,21 +490,23 @@ function Build-Sidebar {
         $countBadge.Child    = $countText
         $rowPanel.Children.Add($countBadge) | Out-Null
 
-        $btn.Content = $rowPanel
+        # Wrap content in a border that fills the button area
+        $outerBorder = New-Object System.Windows.Controls.Border
+        $outerBorder.Height = 52
+        $outerBorder.Child  = $rowPanel
+        $btn.Content        = $outerBorder
 
-        # Build custom control template for sidebar button
-        $btnTemplatePT = [System.Windows.Controls.ControlTemplate]::new([System.Windows.Controls.Button])
-        $borderFactory = [System.Windows.FrameworkElementFactory]::new([System.Windows.Controls.Border])
-        $borderFactory.SetBinding(
-            [System.Windows.Controls.Border]::BackgroundProperty,
-            [System.Windows.Data.Binding]::new("Background") | ForEach-Object { $_.RelativeSource = [System.Windows.Data.RelativeSource]::new([System.Windows.Data.RelativeSourceMode]::TemplatedParent); $_ }
-        )
-        $borderFactory.SetValue([System.Windows.Controls.Border]::PaddingProperty, [System.Windows.Thickness]::new(0,0,0,0))
-        $cpFactory = [System.Windows.FrameworkElementFactory]::new([System.Windows.Controls.ContentPresenter])
-        $cpFactory.SetValue([System.Windows.Controls.ContentPresenter]::VerticalAlignmentProperty, [System.Windows.VerticalAlignment]::Center)
-        $borderFactory.AppendChild($cpFactory)
-        $btnTemplatePT.VisualTree = $borderFactory
-        $btn.Template = $btnTemplatePT
+        # Apply inline XAML template so Background binding works correctly
+        $templateXml = [xml]@"
+<ControlTemplate xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                 TargetType="Button">
+    <Border Background="{TemplateBinding Background}" Height="52">
+        <ContentPresenter VerticalAlignment="Center"/>
+    </Border>
+</ControlTemplate>
+"@
+        $templateReader = New-Object System.Xml.XmlNodeReader $templateXml
+        $btn.Template = [Windows.Markup.XamlReader]::Load($templateReader)
 
         # Events
         $capturedBtn    = $btn
