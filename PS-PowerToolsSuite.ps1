@@ -267,10 +267,11 @@ function Global:Get-PowerToolsWindow { return $Global:PTS_Window }
                 <Border Grid.Row="0" Padding="20,20,20,16">
                     <StackPanel>
                         <TextBlock Text="POWERTOOLS"
-                                   Foreground="#3B5BDB" FontSize="10" FontWeight="Bold"
-                                   Margin="0,0,0,2"/>
+                                   Foreground="#3B5BDB" FontSize="14" FontWeight="Bold"
+                                   Margin="0,0,0,6"/>
                         <TextBlock Text="Suite"
-                                   Foreground="#FFFFFF" FontSize="18" FontWeight="SemiBold"/>
+                                   Foreground="#FFFFFF" FontSize="28" FontWeight="Bold"
+                                   Margin="0,0,0,0"/>
                     </StackPanel>
                 </Border>
 
