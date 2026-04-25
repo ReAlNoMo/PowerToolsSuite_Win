@@ -419,29 +419,11 @@ function Global:Update-PTSStyles {
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <!-- PT BADGE LOGO -->
-                <Border Grid.Row="0" Padding="16,0,16,0" Background="#1A2254">
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Background="#3B5BDB" CornerRadius="10"
-                                Width="44" Height="44" Margin="0,0,12,0">
-                            <TextBlock Text="PT" Foreground="White"
-                                       FontSize="16" FontWeight="Bold"
-                                       HorizontalAlignment="Center"
-                                       VerticalAlignment="Center"/>
-                        </Border>
-                        <StackPanel VerticalAlignment="Center">
-                            <TextBlock x:Name="LogoText"
-                                       Text="PowerTools"
-                                       Foreground="#FFFFFF"
-                                       FontSize="15" FontWeight="Bold"
-                                       LineHeight="18"/>
-                            <TextBlock x:Name="LogoSub"
-                                       Text="Suite"
-                                       Foreground="#A8B4E8"
-                                       FontSize="12" FontWeight="Normal"
-                                       LineHeight="16"/>
-                        </StackPanel>
-                    </StackPanel>
+                <!-- LOGO IMAGE -->
+                <Border Grid.Row="0" Padding="8,12,8,12" Background="#1A2254">
+                    <Image Source="https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/logo/PowerToolsSuite_Logo_02_cut.png"
+                           Stretch="UniformToFill"
+                           MaxHeight="60"/>
                 </Border>
 
                 <Border x:Name="SidebarDivTop" Grid.Row="1" Height="1" Background="#232D6B"/>
