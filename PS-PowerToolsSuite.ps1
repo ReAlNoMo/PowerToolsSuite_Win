@@ -397,16 +397,22 @@ function Global:Update-PTSStyles {
 
         <Rectangle Grid.Row="0" Fill="#3B5BDB"/>
 
-        <Grid Grid.Row="1">
+        <Grid Grid.Row="1" Grid.IsSharedSizeScope="True">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="200"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
 
-            <!-- LEFT SIDEBAR -->
-            <Grid x:Name="SidebarGrid" Grid.Column="0" Background="#1A2254">
+            <!-- SIDEBAR LOGO - Row 0, Col 0 - same row as header -->
+            <Grid x:Name="SidebarGrid" Grid.Column="0" Grid.Row="0" Grid.RowSpan="4" Background="#1A2254">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto" SharedSizeGroup="HeaderRow"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="*"/>
                     <RowDefinition Height="Auto"/>
@@ -414,9 +420,8 @@ function Global:Update-PTSStyles {
                 </Grid.RowDefinitions>
 
                 <!-- PT BADGE LOGO -->
-                <Border Grid.Row="0" Padding="16,18,16,14">
+                <Border Grid.Row="0" Padding="16,0,16,0" Background="#1A2254">
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <!-- PT Monogramm Badge -->
                         <Border Background="#3B5BDB" CornerRadius="10"
                                 Width="44" Height="44" Margin="0,0,12,0">
                             <TextBlock Text="PT" Foreground="White"
@@ -424,7 +429,6 @@ function Global:Update-PTSStyles {
                                        HorizontalAlignment="Center"
                                        VerticalAlignment="Center"/>
                         </Border>
-                        <!-- Text Stack -->
                         <StackPanel VerticalAlignment="Center">
                             <TextBlock x:Name="LogoText"
                                        Text="PowerTools"
@@ -465,9 +469,9 @@ function Global:Update-PTSStyles {
             </Grid>
 
             <!-- RIGHT CONTENT -->
-            <Grid Grid.Column="1">
+            <Grid Grid.Column="1" Grid.Row="0" Grid.RowSpan="4">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto" SharedSizeGroup="HeaderRow"/>
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
 
