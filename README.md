@@ -59,6 +59,16 @@ irm "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/install
 
 ---
 
+## 🎨 Dark Mode
+> **Global theme toggle** for entire UI
+- Toggle button (bottom-left sidebar)
+- Light + Dark themes
+- Dynamic brush updates
+- Persistent across modules
+- All native controls
+
+---
+
 ## 🔒 1. Hash Verifier
 > **Category:** Security  
 > **Admin:** ❌ No  
@@ -130,17 +140,36 @@ Desktop\Hardware_Report_YYYY-MM-DD_HH-MM.html
 > **Admin:** ❌ No  
 
 ### ✔ What it does
-- Launch Chrome / Firefox sandboxed
-- Incognito / Private mode
-- Detect Sandboxie + browsers
-- Configurable sandbox
+- Launch browser sandboxed via Sandboxie-Plus
+- Incognito / Private mode selection
+- Auto-detect installed browsers
+- 6 supported browsers
+- Configurable sandbox settings
+
+### 🌐 Supported Browsers
+
+| Browser | Incognito | Private Mode | Auto-Detect |
+|---------|-----------|--------------|------------|
+| Chrome | ✅ | N/A | ✅ |
+| Chromium | ✅ | N/A | ✅ |
+| Edge | ✅ | N/A | ✅ |
+| Firefox | N/A | ✅ | ✅ |
+| Opera | ✅ | N/A | ✅ |
+| Brave | ✅ | N/A | ✅ |
 
 ⚠️ **Requirements**
 - Sandboxie-Plus installed
-- Chrome or Firefox
+- At least one supported browser
+
+### 🧠 UI Features
+- ✅ Browser selector dropdown
+- ✅ Mode selection (Incognito/Private)
+- ✅ Sandbox config options
+- 🔍 Auto-detection + status display
+- 🪵 Activity log
 
 💡 **Use case**
-> Safely browse untrusted websites or test malware
+> Safely browse untrusted websites, test malware, isolate browsing activity
 
 ---
 
@@ -148,7 +177,7 @@ Desktop\Hardware_Report_YYYY-MM-DD_HH-MM.html
 > **Category:** Performance  
 > **Admin:** ⚠️ Yes  
 
-> 🚀 Applies **16 performance tweaks** (idempotent)
+> 🚀 Applies **29 performance tweaks** with risk levels (idempotent)
 
 ---
 
@@ -158,11 +187,13 @@ Desktop\Hardware_Report_YYYY-MM-DD_HH-MM.html
 |------|--------|--------|------|
 | HVCI Disable | 🚀 Up to +25% FPS | ✅ Yes | 🔴 High |
 | GPU Scheduling | ⏱️ -2ms latency | ✅ Yes | 🟢 Low |
+| Spectre/Meltdown Disable | ⚡ +5-10% CPU | ✅ Yes | 🔴 High |
+| NVMe Stack Optimization | 💾 SSD speed boost | ✅ Yes | 🟡 Medium |
 | Win32Priority | 🎯 Better frame consistency | ❌ No | 🟢 Low |
 
 ---
 
-### ⚙️ System Tweaks Overview
+### ⚙️ System Tweaks Overview (29 Total)
 
 <details>
 <summary>🔽 Show all tweaks</summary>
@@ -171,36 +202,78 @@ Desktop\Hardware_Report_YYYY-MM-DD_HH-MM.html
 - Win32PrioritySeparation
 - SystemResponsiveness
 - NetworkThrottling disabled
+- Timer Resolution Boost
+- Process Priority Boost
 
 #### 🎨 Visual Effects
 - Disable transparency
 - Disable animations
+- Disable blur effects
+- Reduce shadow depth
+
+#### 💾 Storage & I/O
+- NVMe Stack (Build 26100+)
+- Disk I/O Priority
+- Cache optimization
 
 #### 🎮 Gaming Features
 - Game Mode
 - GPU Scheduling
+- DirectX 12 optimization
+- DXVK settings
+
+#### 🔒 Security (High Risk)
+- HVCI Disable
+- Spectre/Meltdown Disable
+- Virtualization tweaks
+
+#### 🌐 Network
+- DNS caching
+- TCP optimization
+- UDP buffer tuning
+
+#### 🔋 Power & Thermal
+- Power Plan (High Performance)
+- Thermal throttling control
 
 #### 🔒 Privacy
 - Disable search history
 - Disable cross-device sharing
+- Telemetry reduction
 
 </details>
 
 ---
 
 ### 🧠 UI Features
-- ✅ Checkbox selection
+- ✅ Checkbox selection with risk indicators
+- 🔍 Hardware detection (Intel/AMD/NVIDIA/AMD GPU)
+- ⚠️ X3D CPU auto-detection
 - 🔍 Status detection (APPLIED / MISSING)
 - 🔄 Re-scan button
-- 🪵 Activity log
-- 🔁 Safe re-run (idempotent)
+- 🪵 Activity log with timestamps
+- 💾 Profile Save/Load (JSON format)
+- 🔄 Registry Backup before changes
+- 🔧 Restore Points auto-creation
+- 🎨 Dark Mode support
+
+---
+
+### 📋 Profile System
+- Save current tweak configuration
+- Load saved profiles
+- Hardware context stored
+- JSON format (human-readable)
+- Multiple profiles supported
 
 ---
 
 ### ⚠️ Important Notes
 
 > 🔴 **Reboot required** for some tweaks  
-> 🧠 AMD X3D CPUs → Game Mode MUST stay enabled  
+> 🧠 **AMD X3D CPUs** → Game Mode MUST stay enabled (auto-detected)  
+> 🔒 **High-Risk tweaks** → User confirmation required  
+> 💾 **Registry backup** → Automatic before changes  
 > ⚡ Competitive vs AAA tuning supported  
 
 ---
@@ -399,4 +472,4 @@ MIT
 
 # 👤 Author
 **ReAlNoMo**  
-Version 1.1 • April 2026
+Version 1.2 • April 2026
