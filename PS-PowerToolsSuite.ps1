@@ -75,7 +75,7 @@ $Global:PTS_Theme = @{
     Primary              = "#3B5BDB"
     PrimaryDark          = "#2F4AC2"
     PrimaryHover         = "#2540A8"
-    SidebarBg            = "#1A2254"
+    SidebarBg            = "#101D51"
     SidebarDivider       = "#232D6B"
     SidebarHover         = "#2A3470"
     SidebarActive        = "#3B5BDB"
@@ -125,7 +125,7 @@ $Global:PTS_ThemeDark = @{
     SidebarText          = "#8890B8"
     SidebarTextActive    = "#FFFFFF"
     Background           = "#0F1429"
-    Surface              = "#1A2254"
+    Surface              = "#101D51"
     Border               = "#2A3580"
     TextDark             = "#E0E6FF"
     TextMid              = "#B0B8E8"
@@ -142,7 +142,7 @@ $Global:PTS_ThemeDark = @{
     BtnSecBorder         = "#2A3580"
     BtnSecHover          = "#263070"
     BtnSecHoverBorder    = "#5B7FFF"
-    TileBg               = "#1A2254"
+    TileBg               = "#101D51"
     TileBorder           = "#2A3580"
     TileHoverBg          = "#1E2A6A"
     TileHoverBorder      = "#5B7FFF"
@@ -369,7 +369,7 @@ function Global:Update-PTSStyles {
         </Style>
 
         <Style x:Key="SidebarButton" TargetType="Button">
-            <Setter Property="Background"             Value="#1A2254"/>
+            <Setter Property="Background"             Value="#101D51"/>
             <Setter Property="BorderThickness"        Value="0"/>
             <Setter Property="Cursor"                 Value="Hand"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -410,7 +410,7 @@ function Global:Update-PTSStyles {
             </Grid.RowDefinitions>
 
             <!-- SIDEBAR LOGO - Row 0, Col 0 - same row as header -->
-            <Grid x:Name="SidebarGrid" Grid.Column="0" Grid.Row="0" Grid.RowSpan="4" Background="#1A2254">
+            <Grid x:Name="SidebarGrid" Grid.Column="0" Grid.Row="0" Grid.RowSpan="4" Background="#101D51">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" SharedSizeGroup="HeaderRow"/>
                     <RowDefinition Height="Auto"/>
@@ -420,7 +420,7 @@ function Global:Update-PTSStyles {
                 </Grid.RowDefinitions>
 
                 <!-- LOGO IMAGE -->
-                <Border Grid.Row="0" Padding="8,12,8,12" Background="#1A2254">
+                <Border Grid.Row="0" Padding="8,12,8,12" Background="#101D51">
                     <Image Source="https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/logo/PowerToolsSuite_Logo_02_cut.png"
                            Stretch="UniformToFill"
                            MaxHeight="60"/>
