@@ -10,17 +10,20 @@ Register-PowerToolsModule `
     -Show          {
 
     [xml]$viewXaml = @"
-<Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-      xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
-    <Grid.RowDefinitions>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="*"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="Auto"/>
-        <RowDefinition Height="140"/>
-    </Grid.RowDefinitions>
+<ScrollViewer xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+              VerticalScrollBarVisibility="Auto"
+              HorizontalScrollBarVisibility="Disabled">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
 
     <!-- ROW 0: Hardware Info + Recommended Tools -->
     <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#D0D6F0"
@@ -95,13 +98,10 @@ Register-PowerToolsModule `
                 Style="{DynamicResource SecondaryButton}" Padding="10,5" FontSize="11"/>
     </Grid>
 
-    <!-- ROW 3: TWEAK LIST (takes all available space) -->
+    <!-- ROW 3: TWEAK LIST (scrollable) -->
     <Border Grid.Row="3" Background="#FFFFFF" BorderBrush="#D0D6F0"
-            BorderThickness="1.5" CornerRadius="8" MinHeight="200">
-        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled">
-            <ItemsControl x:Name="TweakList" Margin="6,6,6,6"/>
-        </ScrollViewer>
+            BorderThickness="1.5" CornerRadius="8" MinHeight="300" Margin="0,0,0,6">
+        <ItemsControl x:Name="TweakList" Margin="6,6,6,6"/>
     </Border>
 
     <!-- ROW 4: Estimate bar -->
@@ -161,7 +161,8 @@ Register-PowerToolsModule `
             </ScrollViewer>
         </Grid>
     </Border>
-</Grid>
+    </Grid>
+</ScrollViewer>
 "@
 
     $win    = Get-PowerToolsWindow
