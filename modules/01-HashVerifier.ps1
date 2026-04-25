@@ -1,5 +1,6 @@
 # Module: Hash Verifier
 # Computes and compares file hashes across multiple algorithms.
+# Progress bar + live log updates via background runspace + DispatcherTimer.
 
 Register-PowerToolsModule `
     -Id          "hash-verifier" `
@@ -12,6 +13,7 @@ Register-PowerToolsModule `
 <Grid xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
       xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Grid.RowDefinitions>
+        <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
         <RowDefinition Height="Auto"/>
@@ -74,29 +76,52 @@ Register-PowerToolsModule `
 
     <Button Grid.Row="3" x:Name="VerifyBtn" Content="Verify Hash"
             Style="{DynamicResource PrimaryButton}" Height="46"
-            FontSize="14" IsEnabled="False" Margin="0,6,0,0"/>
+            FontSize="14" IsEnabled="False" Margin="0,0,0,14"/>
 
-    <Grid Grid.Row="4" Margin="0,20,0,8">
+    <!-- Progress section -->
+    <Grid Grid.Row="4" Margin="0,0,0,6">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
-        <TextBlock Text="ACTIVITY LOG" Foreground="#8890B8" FontSize="10"
-                   FontWeight="Bold" VerticalAlignment="Center"/>
-        <Button x:Name="ClearLogBtn" Grid.Column="1" Content="Clear Log"
-                Style="{DynamicResource SecondaryButton}" Padding="12,6" FontSize="11"/>
+        <TextBlock x:Name="StatusLabel" Grid.Column="0"
+                   Text="Idle" Foreground="#8890B8" FontSize="11"
+                   VerticalAlignment="Center"/>
+        <TextBlock x:Name="PctLabel" Grid.Column="1"
+                   Text="" Foreground="#3B5BDB" FontSize="11" FontWeight="Bold"
+                   VerticalAlignment="Center"/>
     </Grid>
+    <ProgressBar Grid.Row="5" x:Name="ProgressBar" Height="6"
+                 Minimum="0" Maximum="100" Value="0" Margin="0,0,0,14"/>
 
-    <Border Grid.Row="5" Background="#FAFBFF" BorderBrush="#D8DEFA"
-            BorderThickness="1.5" CornerRadius="10">
-        <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
-            <TextBlock x:Name="LogBox" Foreground="#8890B8"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="12" Padding="16,14" TextWrapping="Wrap"
-                       LineHeight="20"
-                       Text="Ready. Select a file and enter a hash value."/>
-        </ScrollViewer>
-    </Border>
+    <Grid Grid.Row="6" Margin="0,0,0,0">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="0,0,0,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="ACTIVITY LOG" Foreground="#8890B8" FontSize="10"
+                       FontWeight="Bold" VerticalAlignment="Center"/>
+            <Button x:Name="ClearLogBtn" Grid.Column="1" Content="Clear Log"
+                    Style="{DynamicResource SecondaryButton}" Padding="12,6" FontSize="11"/>
+        </Grid>
+
+        <Border Grid.Row="1" Background="#FAFBFF" BorderBrush="#D8DEFA"
+                BorderThickness="1.5" CornerRadius="10" MinHeight="120">
+            <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
+                <TextBlock x:Name="LogBox" Foreground="#8890B8"
+                           FontFamily="Cascadia Code, Consolas, Courier New"
+                           FontSize="12" Padding="16,14" TextWrapping="Wrap"
+                           LineHeight="20"
+                           Text="Ready. Select a file and enter a hash value."/>
+            </ScrollViewer>
+        </Border>
+    </Grid>
 </Grid>
 "@
 
@@ -104,26 +129,29 @@ Register-PowerToolsModule `
     $reader = New-Object System.Xml.XmlNodeReader $viewXaml
     $view   = [Windows.Markup.XamlReader]::Load($reader)
 
-    # Inherit styles from main window
-    $view.Resources.MergedDictionaries.Clear()
     foreach ($k in @("PrimaryButton","SecondaryButton")) {
         $view.Resources.Add($k, $win.FindResource($k))
     }
 
-    $script:HV_algo         = $view.FindName("AlgoCombo")
-    $script:HV_browse       = $view.FindName("BrowseBtn")
-    $script:HV_pathLbl      = $view.FindName("FilePathLabel")
-    $script:HV_expected     = $view.FindName("ExpectedHashBox")
-    $script:HV_verify       = $view.FindName("VerifyBtn")
-    $script:HV_reset        = $view.FindName("ResetBtn")
-    $script:HV_clearLog     = $view.FindName("ClearLogBtn")
-    $script:HV_logBox       = $view.FindName("LogBox")
-    $script:HV_logScroller  = $view.FindName("LogScroller")
-    $script:HV_selectedFile = ""
-    $script:HV_initText     = "Ready. Select a file and enter a hash value."
+    $Global:HV_algo         = $view.FindName("AlgoCombo")
+    $Global:HV_browse       = $view.FindName("BrowseBtn")
+    $Global:HV_pathLbl      = $view.FindName("FilePathLabel")
+    $Global:HV_expected     = $view.FindName("ExpectedHashBox")
+    $Global:HV_verify       = $view.FindName("VerifyBtn")
+    $Global:HV_reset        = $view.FindName("ResetBtn")
+    $Global:HV_clearLog     = $view.FindName("ClearLogBtn")
+    $Global:HV_logBox       = $view.FindName("LogBox")
+    $Global:HV_logScroller  = $view.FindName("LogScroller")
+    $Global:HV_progress     = $view.FindName("ProgressBar")
+    $Global:HV_statusLabel  = $view.FindName("StatusLabel")
+    $Global:HV_pctLabel     = $view.FindName("PctLabel")
+    $Global:HV_selectedFile = ""
+    $Global:HV_initText     = "Ready. Select a file and enter a hash value."
+    $Global:HV_msgQueue     = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+    $Global:HV_timer        = $null
 
     function Global:HV-UpdateVerify {
-        $script:HV_verify.IsEnabled = ($script:HV_selectedFile -ne "") -and ($script:HV_expected.Text.Trim() -ne "")
+        $Global:HV_verify.IsEnabled = ($Global:HV_selectedFile -ne "") -and ($Global:HV_expected.Text.Trim() -ne "")
     }
 
     function Global:HV-AddLog {
@@ -135,77 +163,192 @@ Register-PowerToolsModule `
             default { "[INFO]" }
         }
         $entry = "[$ts]  $tag  $Msg`n"
-        if ($script:HV_logBox.Text -eq $script:HV_initText) { $script:HV_logBox.Text = $entry }
-        else { $script:HV_logBox.Text += $entry }
-        $script:HV_logScroller.Dispatcher.Invoke([action]{ $script:HV_logScroller.ScrollToEnd() })
+        if ($Global:HV_logBox.Text -eq $Global:HV_initText) { $Global:HV_logBox.Text = $entry }
+        else { $Global:HV_logBox.Text += $entry }
+        $Global:HV_logScroller.ScrollToEnd()
     }
 
-    $script:HV_browse.Add_Click({
+    # Timer tick: drain queue → update UI on UI thread
+    function Global:HV-StartTimer {
+        $Global:HV_timer = New-Object System.Windows.Threading.DispatcherTimer
+        $Global:HV_timer.Interval = [TimeSpan]::FromMilliseconds(150)
+        $Global:HV_timer.Add_Tick({
+            $item = $null
+            while ($Global:HV_msgQueue.TryDequeue([ref]$item)) {
+                switch ($item.Type) {
+                    "LOG" {
+                        HV-AddLog -Msg $item.Msg -Type $item.Tag
+                    }
+                    "PROGRESS" {
+                        $Global:HV_progress.Value    = $item.Pct
+                        $Global:HV_statusLabel.Text  = $item.Status
+                        $Global:HV_pctLabel.Text      = "$($item.Pct)%"
+                    }
+                    "DONE" {
+                        $Global:HV_timer.Stop()
+                        $Global:HV_progress.Value    = 100
+                        $Global:HV_pctLabel.Text     = "100%"
+                        $Global:HV_verify.IsEnabled  = $true
+                        $Global:HV_verify.Content    = "Verify Hash"
+
+                        if ($item.Match) {
+                            $Global:HV_statusLabel.Text      = "PASS - Hash values match"
+                            $Global:HV_statusLabel.Foreground = $Global:PTS_Brush["Success"]
+                            $Global:HV_logBox.Foreground      = $Global:PTS_Brush["Success"]
+                        } else {
+                            $Global:HV_statusLabel.Text      = "FAIL - Hash mismatch"
+                            $Global:HV_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
+                            $Global:HV_logBox.Foreground      = $Global:PTS_Brush["Danger"]
+                        }
+                    }
+                    "ERROR" {
+                        $Global:HV_timer.Stop()
+                        $Global:HV_statusLabel.Text      = "Error"
+                        $Global:HV_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
+                        $Global:HV_verify.IsEnabled      = $true
+                        $Global:HV_verify.Content        = "Verify Hash"
+                    }
+                }
+            }
+        })
+        $Global:HV_timer.Start()
+    }
+
+    # Background hash script
+    $Global:HV_hashScript = {
+        param($FilePath, $AlgoKey, $ExpectedHash, $Queue)
+
+        function Enqueue-Log { param($M,$T="INFO") $Queue.Enqueue([PSCustomObject]@{Type="LOG";Msg=$M;Tag=$T}) }
+        function Enqueue-Progress { param($P,$S) $Queue.Enqueue([PSCustomObject]@{Type="PROGRESS";Pct=$P;Status=$S}) }
+
+        try {
+            $fi  = Get-Item -LiteralPath $FilePath
+            $szMB = [math]::Round($fi.Length / 1MB, 2)
+            Enqueue-Log "File : $($fi.Name)" "INFO"
+            Enqueue-Log "Size : $szMB MB" "INFO"
+            Enqueue-Log "Algorithm : $AlgoKey" "INFO"
+            Enqueue-Progress 5 "Opening file..."
+
+            # Chunked read with progress
+            $algo = [System.Security.Cryptography.HashAlgorithm]::Create($AlgoKey)
+            $fs   = [System.IO.File]::OpenRead($FilePath)
+            $buf  = New-Object byte[] (1MB)
+            $total = $fs.Length
+            $read  = 0
+
+            Enqueue-Log "Computing hash..." "INFO"
+            Enqueue-Progress 10 "Computing hash..."
+
+            while ($true) {
+                $n = $fs.Read($buf, 0, $buf.Length)
+                if ($n -le 0) { break }
+                $algo.TransformBlock($buf, 0, $n, $null, 0) | Out-Null
+                $read += $n
+                $pct = [int](10 + (($read / $total) * 85))
+                $mbDone = [math]::Round($read / 1MB, 1)
+                $mbTotal = [math]::Round($total / 1MB, 1)
+                Enqueue-Progress $pct "Hashing... $mbDone MB / $mbTotal MB"
+            }
+            $algo.TransformFinalBlock(@(), 0, 0) | Out-Null
+            $fs.Close()
+
+            $computed = ($algo.Hash | ForEach-Object { $_.ToString("x2") }) -join ""
+            Enqueue-Progress 98 "Comparing hashes..."
+            Enqueue-Log "Computed : $($computed.ToUpper())" "HASH"
+            Enqueue-Log "Expected : $($ExpectedHash.ToUpper())" "HASH"
+
+            $match = ($computed.ToUpper() -eq $ExpectedHash.ToUpper().Trim())
+            if ($match) {
+                Enqueue-Log "RESULT: HASH VALUES MATCH  [PASS]" "OK"
+            } else {
+                Enqueue-Log "RESULT: HASH VALUES DO NOT MATCH  [FAIL]" "FAIL"
+            }
+            $Queue.Enqueue([PSCustomObject]@{Type="DONE"; Match=$match})
+        }
+        catch {
+            $Queue.Enqueue([PSCustomObject]@{Type="LOG"; Msg="Error: $_"; Tag="FAIL"})
+            $Queue.Enqueue([PSCustomObject]@{Type="ERROR"})
+        }
+    }
+
+    $Global:HV_browse.Add_Click({
         $ofd = New-Object System.Windows.Forms.OpenFileDialog
         $ofd.Title  = "Select a file"
         $ofd.Filter = "All Files (*.*)|*.*"
         if ($ofd.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
-            $script:HV_selectedFile     = $ofd.FileName
-            $script:HV_pathLbl.Text     = $ofd.FileName
-            $script:HV_pathLbl.Foreground = Get-PowerToolsBrush "TextDark"
-            $script:HV_logBox.Foreground  = Get-PowerToolsBrush "TextMuted"
+            $Global:HV_selectedFile          = $ofd.FileName
+            $Global:HV_pathLbl.Text          = $ofd.FileName
+            $Global:HV_pathLbl.Foreground    = $Global:PTS_Brush["TextDark"]
+            $Global:HV_logBox.Foreground     = $Global:PTS_Brush["TextMuted"]
+            $Global:HV_statusLabel.Text      = "File loaded"
+            $Global:HV_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
+            $Global:HV_progress.Value        = 0
+            $Global:HV_pctLabel.Text         = ""
             HV-AddLog "File loaded: $($ofd.SafeFileName)" "INFO"
             HV-UpdateVerify
         }
     })
 
-    $script:HV_expected.Add_TextChanged({ HV-UpdateVerify })
-    $script:HV_algo.Add_SelectionChanged({ HV-UpdateVerify })
+    $Global:HV_expected.Add_TextChanged({ HV-UpdateVerify })
+    $Global:HV_algo.Add_SelectionChanged({ HV-UpdateVerify })
 
-    $script:HV_verify.Add_Click({
-        if ($script:HV_selectedFile -eq "" -or -not (Test-Path -LiteralPath $script:HV_selectedFile)) {
+    $Global:HV_verify.Add_Click({
+        if ($Global:HV_selectedFile -eq "" -or -not (Test-Path -LiteralPath $Global:HV_selectedFile)) {
             HV-AddLog "Error: No valid file selected." "WARN"; return
         }
-        $input = $script:HV_expected.Text.Trim().ToUpper()
-        if ($input -eq "") { HV-AddLog "Error: No hash value entered." "WARN"; return }
+        $inputHash = $Global:HV_expected.Text.Trim()
+        if ($inputHash -eq "") { HV-AddLog "Error: No hash value entered." "WARN"; return }
 
-        $algoName = $script:HV_algo.Text
-        $algoKey = switch ($algoName) {
+        $algoName = $Global:HV_algo.Text
+        $algoKey  = switch ($algoName) {
             "SHA-256" { "SHA256" } "SHA-512" { "SHA512" } "SHA-384" { "SHA384" }
             "SHA-1"   { "SHA1"   } "MD5"     { "MD5"    } default   { "SHA256" }
         }
 
-        HV-AddLog "Starting verification with algorithm: $algoName" "INFO"
-        try {
-            $fi = Get-Item -LiteralPath $script:HV_selectedFile
-            $sz = [math]::Round($fi.Length / 1024, 2)
-            HV-AddLog "File: $($fi.Name)  ($sz KB)" "INFO"
+        # Reset UI
+        $Global:HV_verify.IsEnabled          = $false
+        $Global:HV_verify.Content            = "Verifying..."
+        $Global:HV_progress.Value            = 0
+        $Global:HV_pctLabel.Text             = "0%"
+        $Global:HV_statusLabel.Text          = "Starting..."
+        $Global:HV_statusLabel.Foreground    = $Global:PTS_Brush["TextMuted"]
+        $Global:HV_logBox.Foreground         = $Global:PTS_Brush["TextMuted"]
+        $Global:HV_msgQueue                  = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
 
-            $computed = (Get-FileHash -Path $script:HV_selectedFile -Algorithm $algoKey).Hash
-            HV-AddLog "Computed : $computed" "HASH"
-            HV-AddLog "Expected : $input"    "HASH"
+        HV-AddLog "Starting verification: $algoName" "INFO"
+        HV-StartTimer
 
-            if ($computed -eq $input) {
-                HV-AddLog "RESULT: HASH VALUES MATCH  [PASS]" "OK"
-                $script:HV_logBox.Foreground = Get-PowerToolsBrush "Success"
-            } else {
-                HV-AddLog "RESULT: HASH VALUES DO NOT MATCH  [FAIL]" "FAIL"
-                $script:HV_logBox.Foreground = Get-PowerToolsBrush "Danger"
-            }
-        } catch {
-            HV-AddLog "Error processing file: $_" "WARN"
-        }
+        # Launch background runspace
+        $rs = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspace()
+        $rs.Open()
+        $ps = [System.Management.Automation.PowerShell]::Create()
+        $ps.Runspace = $rs
+        $ps.AddScript($Global:HV_hashScript) | Out-Null
+        $ps.AddArgument($Global:HV_selectedFile) | Out-Null
+        $ps.AddArgument($algoKey)                | Out-Null
+        $ps.AddArgument($inputHash)              | Out-Null
+        $ps.AddArgument($Global:HV_msgQueue)     | Out-Null
+        $ps.BeginInvoke() | Out-Null
     })
 
-    $script:HV_reset.Add_Click({
-        $script:HV_selectedFile      = ""
-        $script:HV_pathLbl.Text      = "No file selected..."
-        $script:HV_pathLbl.Foreground = Get-PowerToolsBrush "TextFaint"
-        $script:HV_expected.Text     = ""
-        $script:HV_logBox.Text       = $script:HV_initText
-        $script:HV_logBox.Foreground = Get-PowerToolsBrush "TextMuted"
+    $Global:HV_reset.Add_Click({
+        if ($Global:HV_timer -ne $null) { $Global:HV_timer.Stop() }
+        $Global:HV_selectedFile          = ""
+        $Global:HV_pathLbl.Text          = "No file selected..."
+        $Global:HV_pathLbl.Foreground    = $Global:PTS_Brush["TextFaint"]
+        $Global:HV_expected.Text         = ""
+        $Global:HV_logBox.Text           = $Global:HV_initText
+        $Global:HV_logBox.Foreground     = $Global:PTS_Brush["TextMuted"]
+        $Global:HV_progress.Value        = 0
+        $Global:HV_pctLabel.Text         = ""
+        $Global:HV_statusLabel.Text      = "Idle"
+        $Global:HV_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
         HV-UpdateVerify
-        HV-AddLog "Form reset." "INFO"
     })
 
-    $script:HV_clearLog.Add_Click({
-        $script:HV_logBox.Text = ""
-        $script:HV_logBox.Foreground = Get-PowerToolsBrush "TextMuted"
+    $Global:HV_clearLog.Add_Click({
+        $Global:HV_logBox.Text       = ""
+        $Global:HV_logBox.Foreground = $Global:PTS_Brush["TextMuted"]
         HV-AddLog "Log cleared." "INFO"
     })
 
