@@ -53,10 +53,10 @@ Register-PowerToolsModule `
     </StackPanel>
 
     <!-- INFO BAR -->
-    <Border Grid.Row="2" Background="#EEF1FC" BorderBrush="#D0D6F0" BorderThickness="1"
+    <Border Grid.Row="2" x:Name="InfoBar" BorderThickness="1"
             CornerRadius="6" Padding="12,8" Margin="0,0,0,14">
-        <TextBlock Text="All tools are downloaded directly from official vendor servers. Files are portable and require no installation."
-                   Foreground="#4A5280" FontSize="11" TextWrapping="Wrap"/>
+        <TextBlock x:Name="InfoBarText" FontSize="11" TextWrapping="Wrap"
+                   Text="All tools are downloaded directly from official vendor servers. Files are portable and require no installation."/>
     </Border>
 
     <!-- PROGRESS -->
@@ -70,7 +70,7 @@ Register-PowerToolsModule `
                      Foreground="#3B5BDB" Background="#E0E5F5"
                      BorderThickness="0" Margin="0,0,10,0"/>
         <TextBlock x:Name="PctLabel" Grid.Column="1" Text="0%"
-                   Foreground="#4A5280" FontSize="11" FontWeight="SemiBold"
+                   FontSize="11" FontWeight="SemiBold"
                    VerticalAlignment="Center" HorizontalAlignment="Right"/>
     </Grid>
 
@@ -83,7 +83,7 @@ Register-PowerToolsModule `
             <ColumnDefinition Width="110"/>
         </Grid.ColumnDefinitions>
         <TextBlock x:Name="StatusLabel" Grid.Column="0" Text="Ready."
-                   Foreground="#8890B8" FontSize="12" VerticalAlignment="Center"/>
+                   FontSize="12" VerticalAlignment="Center"/>
         <Button x:Name="StartBtn"    Grid.Column="1" Content="Start Download"
                 Style="{DynamicResource PrimaryButton}" Height="38" Margin="0,0,8,0"/>
         <Button x:Name="CancelBtn"   Grid.Column="2" Content="Cancel"
@@ -94,8 +94,7 @@ Register-PowerToolsModule `
     </Grid>
 
     <!-- LOG -->
-    <Border Grid.Row="5" x:Name="LogBorder"
-            BorderThickness="1.5" CornerRadius="8">
+    <Border Grid.Row="5" x:Name="LogBorder" BorderThickness="1.5" CornerRadius="8">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
@@ -137,18 +136,25 @@ Register-PowerToolsModule `
     $Global:AV_logBox       = $view.FindName("LogBox")
     $Global:AV_logScroller  = $view.FindName("LogScroller")
     $Global:AV_logBorder    = $view.FindName("LogBorder")
+    $Global:AV_infoBar      = $view.FindName("InfoBar")
+    $Global:AV_infoBarText  = $view.FindName("InfoBarText")
     $Global:AV_initText     = "Ready."
     $Global:AV_msgQueue     = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
     $Global:AV_timer        = $null
     $Global:AV_cancelFlag   = [System.Threading.CancellationTokenSource]::new()
 
     # Apply theme-aware colors
-    $Global:AV_destBox.Background    = $Global:PTS_Brush["InputBg"]
-    $Global:AV_destBox.Foreground    = $Global:PTS_Brush["InputFg"]
-    $Global:AV_destBox.BorderBrush   = $Global:PTS_Brush["Border"]
-    $Global:AV_logBox.Foreground     = $Global:PTS_Brush["TextMuted"]
-    $Global:AV_logBorder.Background  = $Global:PTS_Brush["LogBg"]
-    $Global:AV_logBorder.BorderBrush = $Global:PTS_Brush["LogBorder"]
+    $Global:AV_destBox.Background     = $Global:PTS_Brush["InputBg"]
+    $Global:AV_destBox.Foreground     = $Global:PTS_Brush["InputFg"]
+    $Global:AV_destBox.BorderBrush    = $Global:PTS_Brush["Border"]
+    $Global:AV_logBox.Foreground      = $Global:PTS_Brush["TextMuted"]
+    $Global:AV_logBorder.Background   = $Global:PTS_Brush["LogBg"]
+    $Global:AV_logBorder.BorderBrush  = $Global:PTS_Brush["LogBorder"]
+    $Global:AV_infoBar.Background     = $Global:PTS_Brush["Surface"]
+    $Global:AV_infoBar.BorderBrush    = $Global:PTS_Brush["Border"]
+    $Global:AV_infoBarText.Foreground = $Global:PTS_Brush["TextMid"]
+    $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
+    $Global:AV_pctLabel.Foreground    = $Global:PTS_Brush["Primary"]
 
     # ===========================================================================
     # HELPERS
@@ -182,15 +188,13 @@ Register-PowerToolsModule `
             $item = $null
             while ($Global:AV_msgQueue.TryDequeue([ref]$item)) {
                 switch ($item.Type) {
-                    "LOG" {
-                        AV-AddLog -Msg $item.Msg -Type $item.Tag
-                    }
-                    "PROGRESS" {
+                    "LOG"       { AV-AddLog -Msg $item.Msg -Type $item.Tag }
+                    "PROGRESS"  {
                         $Global:AV_progress.Value   = $item.Pct
                         $Global:AV_statusLabel.Text = $item.Status
                         $Global:AV_pctLabel.Text    = "$($item.Pct)%"
                     }
-                    "DONE" {
+                    "DONE"      {
                         $Global:AV_timer.Stop()
                         $Global:AV_progress.Value         = 100
                         $Global:AV_pctLabel.Text          = "100%"
@@ -204,7 +208,7 @@ Register-PowerToolsModule `
                         $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["Warning"]
                         AV-SetUI-Busy $false
                     }
-                    "ERROR" {
+                    "ERROR"     {
                         $Global:AV_timer.Stop()
                         $Global:AV_statusLabel.Text       = "Error during download."
                         $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
@@ -217,7 +221,7 @@ Register-PowerToolsModule `
     }
 
     # ===========================================================================
-    # DOWNLOAD SCRIPT BLOCK (runs inside RunspacePool — no outer scope access)
+    # DOWNLOAD WORKER SCRIPT (executes inside RunspacePool)
     # ===========================================================================
     $Global:AV_dlScript = {
         param(
@@ -231,48 +235,46 @@ Register-PowerToolsModule `
             $Queue.Enqueue([PSCustomObject]@{ Type="LOG"; Msg=$Msg; Tag=$Tag })
         }
 
-        $result = [PSCustomObject]@{ Success=$false; Message="" }
+        $result  = [PSCustomObject]@{ Success=$false; Name=$Job.Name; Message="" }
         $name    = $Job.Name
-        $url     = $Job.Url
         $outFile = $Job.OutFile
         $tmpFile = "$outFile.tmp"
 
         if ($CancelToken.IsCancellationRequested) {
-            $result.Message = "Cancelled"
-            return $result
+            $result.Message = "Cancelled"; return $result
         }
 
         Q-Log "Starting: $name" "INFO"
 
-        # Skip if file exists and was written within last 24h
+        # Skip if fresh copy exists (< 24h)
         if (Test-Path $outFile) {
             $age = (Get-Date) - (Get-Item $outFile).LastWriteTime
             if ($age.TotalHours -lt 24) {
                 Q-Log "Skipped (fresh copy exists): $($Job.FileName)" "WARN"
-                $result.Success = $true
-                $result.Message = "Skipped"
-                return $result
+                $result.Success = $true; $result.Message = "Skipped"; return $result
             }
         }
 
-        $urlsToTry = @($url)
+        $urlsToTry = @($Job.Url)
         if ($Job.ContainsKey("FallbackUrl") -and $Job.FallbackUrl) {
             $urlsToTry += $Job.FallbackUrl
         }
 
         foreach ($tryUrl in $urlsToTry) {
             if ($CancelToken.IsCancellationRequested) { break }
+            $fs = $null
             try {
-                $req = [System.Net.HttpWebRequest]::Create($tryUrl)
-                $req.Method    = "GET"
-                $req.UserAgent = "PowerTools-Suite-AVDownloader/1.0"
-                $req.Timeout   = 30000
+                $req                   = [System.Net.HttpWebRequest]::Create($tryUrl)
+                $req.Method            = "GET"
+                $req.UserAgent         = "PowerTools-Suite-AVDownloader/1.0"
+                $req.Timeout           = 30000
+                $req.AllowAutoRedirect = $true
 
-                $resp   = $req.GetResponse()
-                $total  = $resp.ContentLength
-                $stream = $resp.GetResponseStream()
-                $fs     = [System.IO.File]::Create($tmpFile)
-                $buf    = New-Object byte[] 65536
+                $resp       = $req.GetResponse()
+                $total      = $resp.ContentLength
+                $stream     = $resp.GetResponseStream()
+                $fs         = [System.IO.File]::Create($tmpFile)
+                $buf        = New-Object byte[] 65536
                 $downloaded = 0
                 $sw         = [System.Diagnostics.Stopwatch]::StartNew()
                 $lastReport = 0
@@ -286,52 +288,51 @@ Register-PowerToolsModule `
                     $now = $sw.ElapsedMilliseconds
                     if (($now - $lastReport) -ge 500) {
                         $lastReport = $now
-                        $speed = if ($sw.Elapsed.TotalSeconds -gt 0) {
+                        $speed  = if ($sw.Elapsed.TotalSeconds -gt 0) {
                             [math]::Round($downloaded / 1MB / $sw.Elapsed.TotalSeconds, 1)
                         } else { 0 }
-                        $dlMB  = [math]::Round($downloaded / 1MB, 1)
-                        $totMB = if ($total -gt 0) { [math]::Round($total / 1MB, 1) } else { "?" }
-                        $eta   = if ($total -gt 0 -and $speed -gt 0) {
+                        $dlMB   = [math]::Round($downloaded / 1MB, 1)
+                        $totMB  = if ($total -gt 0) { [math]::Round($total / 1MB, 1) } else { "?" }
+                        $eta    = if ($total -gt 0 -and $speed -gt 0) {
                             "$([math]::Round(($total - $downloaded) / 1MB / $speed))s"
                         } else { "..." }
                         Q-Log "$name  |  ${dlMB}MB / ${totMB}MB  |  ${speed} MB/s  |  ETA: $eta" "INFO"
                     }
                 }
 
-                $fs.Close(); $stream.Close(); $resp.Close()
+                $fs.Close(); $fs = $null
+                $stream.Close()
+                $resp.Close()
 
                 if ($CancelToken.IsCancellationRequested) {
-                    if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue }
-                    $result.Message = "Cancelled"
-                    return $result
+                    if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -EA SilentlyContinue }
+                    $result.Message = "Cancelled"; return $result
                 }
 
                 Move-Item -Path $tmpFile -Destination $outFile -Force
                 $sizeMB = [math]::Round((Get-Item $outFile).Length / 1MB, 1)
                 Q-Log "Downloaded: $($Job.FileName) (${sizeMB} MB)" "OK"
-                $result.Success = $true
-                $result.Message = "Done"
+                $result.Success = $true; $result.Message = "Done"
                 return $result
 
             } catch {
                 if ($null -ne $fs) { try { $fs.Close() } catch {} }
-                if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -ErrorAction SilentlyContinue }
-                Q-Log "$name: URL failed ($tryUrl) — $_" "WARN"
+                if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -EA SilentlyContinue }
+                Q-Log "$name: URL failed ($tryUrl) - $_" "WARN"
             }
         }
 
-        Q-Log "FAILED: $name — all URLs exhausted." "FAIL"
+        Q-Log "FAILED: $name - all URLs exhausted." "FAIL"
         $result.Message = "All URLs failed"
         return $result
     }
 
     # ===========================================================================
-    # BUILD SCANNER JOB LIST
+    # SCANNER JOB LIST
     # ===========================================================================
     function Global:AV-GetScannerList {
         param([string]$Dest)
         $list = @()
-
         if ($Global:AV_cbEEK.IsChecked) {
             $list += @{
                 Name     = "Emsisoft Emergency Kit"
@@ -340,7 +341,6 @@ Register-PowerToolsModule `
                 OutFile  = Join-Path $Dest "EmsisoftEmergencyKit.exe"
             }
         }
-
         if ($Global:AV_cbKVRT.IsChecked) {
             $list += @{
                 Name        = "Kaspersky KVRT"
@@ -350,7 +350,6 @@ Register-PowerToolsModule `
                 OutFile     = Join-Path $Dest "KVRT.exe"
             }
         }
-
         if ($Global:AV_cbAdwCleaner.IsChecked) {
             $list += @{
                 Name     = "Malwarebytes AdwCleaner"
@@ -359,7 +358,6 @@ Register-PowerToolsModule `
                 OutFile  = Join-Path $Dest "adwcleaner_latest.exe"
             }
         }
-
         if ($Global:AV_cbHouseCall.IsChecked) {
             $list += @{
                 Name     = "Trend Micro HouseCall"
@@ -368,33 +366,31 @@ Register-PowerToolsModule `
                 OutFile  = Join-Path $Dest "HousecallLauncher64.exe"
             }
         }
-
         return $list
     }
 
     # ===========================================================================
     # START HANDLER
+    # Key fix: RunspacePool + monitor loop ALL inside single Task::Run closure.
+    # Handles (IAsyncResult) never cross runspace boundaries - no serialization.
     # ===========================================================================
     $Global:AV_startBtn.Add_Click({
         $dest = $Global:AV_destBox.Text.Trim()
         if ([string]::IsNullOrWhiteSpace($dest)) {
-            AV-AddLog "No destination folder specified." "FAIL"
-            return
+            AV-AddLog "No destination folder specified." "FAIL"; return
         }
         if (-not (Test-Path $dest)) {
             try {
                 New-Item -ItemType Directory -Path $dest -Force | Out-Null
                 AV-AddLog "Created folder: $dest" "INFO"
             } catch {
-                AV-AddLog "Cannot create folder: $dest — $_" "FAIL"
-                return
+                AV-AddLog "Cannot create folder: $dest - $_" "FAIL"; return
             }
         }
 
         $scanners = AV-GetScannerList -Dest $dest
         if ($scanners.Count -eq 0) {
-            AV-AddLog "No scanners selected." "WARN"
-            return
+            AV-AddLog "No scanners selected." "WARN"; return
         }
 
         $Global:AV_cancelFlag = [System.Threading.CancellationTokenSource]::new()
@@ -406,47 +402,51 @@ Register-PowerToolsModule `
         AV-SetUI-Busy $true
         AV-StartTimer
 
-        # Capture values for background thread
-        $capturedScanners   = @($scanners)
-        $capturedTotal      = $scanners.Count
-        $capturedQueue      = $Global:AV_msgQueue
-        $capturedToken      = $Global:AV_cancelFlag.Token
-        $capturedScript     = $Global:AV_dlScript
+        # Capture all needed values - they live in the closure scope
+        $capturedScanners = @($scanners)
+        $capturedTotal    = $scanners.Count
+        $capturedQueue    = $Global:AV_msgQueue
+        $capturedToken    = $Global:AV_cancelFlag.Token
+        $capturedScript   = $Global:AV_dlScript
 
-        # RunspacePool: 1 thread per scanner, max 4 parallel
-        $maxThreads = [math]::Min($capturedTotal, 4)
-        $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $maxThreads)
-        $pool.Open()
+        $null = [System.Threading.Tasks.Task]::Run([Action]{
+            # Pool + all PS instances + IAsyncResult handles live HERE in this closure.
+            # Nothing crosses a runspace boundary except the dlScript block + plain data.
+            $maxThreads = [math]::Min($capturedTotal, 4)
+            $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $maxThreads)
+            $pool.Open()
 
-        # Launch all jobs
-        $running = @()
-        foreach ($scanner in $capturedScanners) {
-            if ($capturedToken.IsCancellationRequested) { break }
-            $ps = [System.Management.Automation.PowerShell]::Create()
-            $ps.RunspacePool = $pool
-            $ps.AddScript($capturedScript).AddArgument($scanner).AddArgument($capturedQueue).AddArgument($capturedToken) | Out-Null
-            $running += @{ PS=$ps; Handle=$ps.BeginInvoke(); Done=$false; Scanner=$scanner }
-        }
+            $jobs = [System.Collections.Generic.List[hashtable]]::new()
+            foreach ($scanner in $capturedScanners) {
+                if ($capturedToken.IsCancellationRequested) { break }
+                $ps = [System.Management.Automation.PowerShell]::Create()
+                $ps.RunspacePool = $pool
+                $ps.AddScript($capturedScript) `
+                   .AddArgument($scanner) `
+                   .AddArgument($capturedQueue) `
+                   .AddArgument($capturedToken) | Out-Null
+                $jobs.Add(@{ PS=$ps; Handle=$ps.BeginInvoke(); Done=$false })
+            }
 
-        # Monitor thread
-        $monitorScript = {
-            param($running, $total, $queue, $token, $pool)
-
+            # Monitor: handles are local variables here - no serialization needed
             $done = 0
-            while ($done -lt $running.Count) {
+            while ($done -lt $jobs.Count) {
                 Start-Sleep -Milliseconds 300
-                foreach ($r in $running) {
-                    if ($r.Handle.IsCompleted -and -not $r.Done) {
-                        $r.Done = $true
+                foreach ($j in $jobs) {
+                    if (-not $j.Done -and $j.Handle.IsCompleted) {
+                        $j["Done"] = $true
                         $done++
-                        try {
-                            $res = $r.PS.EndInvoke($r.Handle)
-                        } catch {
-                            $queue.Enqueue([PSCustomObject]@{ Type="LOG"; Msg="Exception: $_"; Tag="FAIL" })
+                        try { $j.PS.EndInvoke($j.Handle) } catch {
+                            $capturedQueue.Enqueue([PSCustomObject]@{
+                                Type="LOG"; Msg="Worker error: $_"; Tag="FAIL"
+                            })
                         }
-                        $r.PS.Dispose()
-                        $pct = [int](($done / $total) * 100)
-                        $queue.Enqueue([PSCustomObject]@{ Type="PROGRESS"; Pct=$pct; Status="Completed $done of $total scanner(s)" })
+                        $j.PS.Dispose()
+                        $pct = [int](($done / $capturedTotal) * 100)
+                        $capturedQueue.Enqueue([PSCustomObject]@{
+                            Type="PROGRESS"; Pct=$pct
+                            Status="Completed $done of $capturedTotal scanner(s)"
+                        })
                     }
                 }
             }
@@ -454,17 +454,13 @@ Register-PowerToolsModule `
             $pool.Close()
             $pool.Dispose()
 
-            if ($token.IsCancellationRequested) {
-                $queue.Enqueue([PSCustomObject]@{ Type="CANCELLED" })
+            if ($capturedToken.IsCancellationRequested) {
+                $capturedQueue.Enqueue([PSCustomObject]@{ Type="CANCELLED" })
             } else {
-                $queue.Enqueue([PSCustomObject]@{ Type="LOG"; Msg="All downloads finished."; Tag="OK" })
-                $queue.Enqueue([PSCustomObject]@{ Type="DONE" })
+                $capturedQueue.Enqueue([PSCustomObject]@{ Type="LOG"; Msg="All downloads finished."; Tag="OK" })
+                $capturedQueue.Enqueue([PSCustomObject]@{ Type="DONE" })
             }
-        }
-
-        $monPS = [System.Management.Automation.PowerShell]::Create()
-        $monPS.AddScript($monitorScript).AddArgument($running).AddArgument($capturedTotal).AddArgument($capturedQueue).AddArgument($capturedToken).AddArgument($pool) | Out-Null
-        $monPS.BeginInvoke() | Out-Null
+        })
     })
 
     # ===========================================================================
