@@ -156,8 +156,8 @@ Register-PowerToolsModule `
     # TLS 1.2 für moderne HTTPS-Verbindungen
     [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-    # Helper für sichere Farbzuweisungen (Fallback bei fehlendem PTS_Brush)
-    function Get-ThemeBrush {
+    # Helper für Farben (jetzt global verfügbar)
+    function Global:Get-ThemeBrush {
         param([string]$Key, [string]$Fallback)
         if ($Global:PTS_Brush -and $Global:PTS_Brush.ContainsKey($Key)) {
             return $Global:PTS_Brush[$Key]
@@ -165,7 +165,7 @@ Register-PowerToolsModule `
         return $Fallback
     }
 
-    # Theme-aware Farben setzen
+    # Theme-aware Farben setzen (Initialisierung)
     try {
         $Global:AV_destBox.Background     = Get-ThemeBrush "InputBg" "White"
         $Global:AV_destBox.Foreground     = Get-ThemeBrush "InputFg" "Black"
@@ -179,7 +179,6 @@ Register-PowerToolsModule `
         $Global:AV_statusLabel.Foreground = Get-ThemeBrush "TextMuted" "Gray"
         $Global:AV_pctLabel.Foreground    = Get-ThemeBrush "Primary" "#3B5BDB"
     } catch {
-        # Fallback: Keine Farben setzen, Standardwerte verwenden
         Write-Warning "Theme brush assignment failed: $_"
     }
 
@@ -253,7 +252,7 @@ Register-PowerToolsModule `
     }
 
     # ===========================================================================
-    # DOWNLOAD WORKER SCRIPTBLOCK (als echte Codeblöcke, kein Here-String)
+    # DOWNLOAD WORKER SCRIPTBLOCK
     # ===========================================================================
     $Global:AV_dlScript = {
         param(
@@ -278,7 +277,6 @@ Register-PowerToolsModule `
 
         Q-Log "Starting: $name" "INFO"
 
-        # Überspringen, wenn frische Kopie (< 24h) existiert
         if (Test-Path $outFile) {
             $age = (Get-Date) - (Get-Item $outFile).LastWriteTime
             if ($age.TotalHours -lt 24) {
@@ -361,7 +359,7 @@ Register-PowerToolsModule `
     }
 
     # ===========================================================================
-    # SCANNER JOB LIST (mit verbesserten Fallback-URLs)
+    # SCANNER JOB LIST
     # ===========================================================================
     function Global:AV-GetScannerList {
         param([string]$Dest)
@@ -427,7 +425,6 @@ Register-PowerToolsModule `
             return
         }
 
-        # Vorherigen Cancel-Token abbrechen und neuen erstellen
         if ($Global:AV_cancelFlag) {
             try { $Global:AV_cancelFlag.Cancel() } catch {}
             $Global:AV_cancelFlag.Dispose()
@@ -447,7 +444,8 @@ Register-PowerToolsModule `
         $capturedToken    = $Global:AV_cancelFlag.Token
         $capturedScript   = $Global:AV_dlScript
 
-        $null = [System.Threading.Tasks.Task]::Run({
+        # *** WICHTIGER FIX: [Action] casten ***
+        $null = [System.Threading.Tasks.Task]::Run([Action]{
             try {
                 $maxThreads = [math]::Min($capturedTotal, 4)
                 $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $maxThreads)
@@ -458,7 +456,6 @@ Register-PowerToolsModule `
                     if ($capturedToken.IsCancellationRequested) { break }
                     $ps = [System.Management.Automation.PowerShell]::Create()
                     $ps.RunspacePool = $pool
-                    # Wichtig: Skriptblock in String konvertieren mit .ToString()
                     $null = $ps.AddScript($capturedScript.ToString()).AddArgument($scanner).AddArgument($capturedQueue).AddArgument($capturedToken)
                     $jobs.Add(@{ PS=$ps; Handle=$ps.BeginInvoke(); Done=$false })
                 }
@@ -519,6 +516,7 @@ Register-PowerToolsModule `
     # BROWSE HANDLER
     # ===========================================================================
     $Global:AV_browseBtn.Add_Click({
+        Add-Type -AssemblyName System.Windows.Forms
         $dlg = New-Object System.Windows.Forms.FolderBrowserDialog
         $dlg.Description         = "Select destination folder for AV scanners"
         $dlg.SelectedPath        = $Global:AV_destBox.Text
