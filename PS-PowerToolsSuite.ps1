@@ -194,8 +194,6 @@ function Global:Apply-PTSTheme {
         $Global:PTS_UI.FooterMid.Foreground       = $Global:PTS_Brush["TextFaint"]
         $Global:PTS_UI.SidebarDivTop.Background   = $Global:PTS_Brush["SidebarDivider"]
         $Global:PTS_UI.SidebarDivBot.Background   = $Global:PTS_Brush["SidebarDivider"]
-        $Global:PTS_UI.LogoText.Foreground        = $Global:PTS_Brush["SidebarTextActive"]
-        $Global:PTS_UI.LogoSub.Foreground         = $Global:PTS_Brush["SidebarText"]
         $Global:PTS_UI.DarkModeLabel.Foreground   = $Global:PTS_Brush["SidebarText"]
 
         # Update WPF resource styles for buttons/tiles/inputs
@@ -399,7 +397,7 @@ function Global:Update-PTSStyles {
 
         <Grid Grid.Row="1" Grid.IsSharedSizeScope="True">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="200"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
@@ -502,7 +500,7 @@ function Global:Update-PTSStyles {
         <Border x:Name="FooterBorder" Grid.Row="2" Background="#FFFFFF" BorderBrush="#E0E5F5" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="260"/>
+                    <ColumnDefinition Width="200"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -552,8 +550,6 @@ $Global:PTS_UI = @{
     BackBtn          = $Global:PTS_Window.FindName("BackBtn")
     DarkModeToggle   = $Global:PTS_Window.FindName("DarkModeToggle")
     DarkModeLabel    = $Global:PTS_Window.FindName("DarkModeLabel")
-    LogoText         = $Global:PTS_Window.FindName("LogoText")
-    LogoSub          = $Global:PTS_Window.FindName("LogoSub")
 }
 
 $Global:PTS_UI.DarkModeToggle.Add_Click({
