@@ -1,3 +1,4 @@
+```powershell
 # Module: AV Scanner Downloader
 # Downloads latest on-demand antivirus scanners from official vendor sources.
 # Live progress: per-file MB/s speed + ETA + overall progress bar via ConcurrentQueue + DispatcherTimer.
@@ -143,21 +144,48 @@ Register-PowerToolsModule `
     $Global:AV_timer        = $null
     $Global:AV_cancelFlag   = [System.Threading.CancellationTokenSource]::new()
 
-    # Apply theme-aware colors
-    $Global:AV_destBox.Background     = $Global:PTS_Brush["InputBg"]
-    $Global:AV_destBox.Foreground     = $Global:PTS_Brush["InputFg"]
-    $Global:AV_destBox.BorderBrush    = $Global:PTS_Brush["Border"]
-    $Global:AV_logBox.Foreground      = $Global:PTS_Brush["TextMuted"]
-    $Global:AV_logBorder.Background   = $Global:PTS_Brush["LogBg"]
-    $Global:AV_logBorder.BorderBrush  = $Global:PTS_Brush["LogBorder"]
-    $Global:AV_infoBar.Background     = $Global:PTS_Brush["Surface"]
-    $Global:AV_infoBar.BorderBrush    = $Global:PTS_Brush["Border"]
-    $Global:AV_infoBarText.Foreground = $Global:PTS_Brush["TextMid"]
-    $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
-    $Global:AV_pctLabel.Foreground    = $Global:PTS_Brush["Primary"]
+    # Überprüfung der essentiellen UI-Elemente
+    $missing = @()
+    if (-not $Global:AV_startBtn)     { $missing += "StartBtn" }
+    if (-not $Global:AV_cancelBtn)    { $missing += "CancelBtn" }
+    if (-not $Global:AV_logBox)       { $missing += "LogBox" }
+    if (-not $Global:AV_destBox)      { $missing += "DestBox" }
+    if ($missing.Count -gt 0) {
+        throw "Missing XAML elements: $($missing -join ', ')"
+    }
+
+    # TLS 1.2 für moderne HTTPS-Verbindungen
+    [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+
+    # Helper für sichere Farbzuweisungen (Fallback bei fehlendem PTS_Brush)
+    function Get-ThemeBrush {
+        param([string]$Key, [string]$Fallback)
+        if ($Global:PTS_Brush -and $Global:PTS_Brush.ContainsKey($Key)) {
+            return $Global:PTS_Brush[$Key]
+        }
+        return $Fallback
+    }
+
+    # Theme-aware Farben setzen
+    try {
+        $Global:AV_destBox.Background     = Get-ThemeBrush "InputBg" "White"
+        $Global:AV_destBox.Foreground     = Get-ThemeBrush "InputFg" "Black"
+        $Global:AV_destBox.BorderBrush    = Get-ThemeBrush "Border" "LightGray"
+        $Global:AV_logBox.Foreground      = Get-ThemeBrush "TextMuted" "Gray"
+        $Global:AV_logBorder.Background   = Get-ThemeBrush "LogBg" "#F8F8F8"
+        $Global:AV_logBorder.BorderBrush  = Get-ThemeBrush "LogBorder" "LightGray"
+        $Global:AV_infoBar.Background     = Get-ThemeBrush "Surface" "#F0F0F0"
+        $Global:AV_infoBar.BorderBrush    = Get-ThemeBrush "Border" "LightGray"
+        $Global:AV_infoBarText.Foreground = Get-ThemeBrush "TextMid" "#444"
+        $Global:AV_statusLabel.Foreground = Get-ThemeBrush "TextMuted" "Gray"
+        $Global:AV_pctLabel.Foreground    = Get-ThemeBrush "Primary" "#3B5BDB"
+    } catch {
+        # Fallback: Keine Farben setzen, Standardwerte verwenden
+        Write-Warning "Theme brush assignment failed: $_"
+    }
 
     # ===========================================================================
-    # HELPERS
+    # HELPER: Logging
     # ===========================================================================
     function Global:AV-AddLog {
         param([string]$Msg, [string]$Type = "INFO")
@@ -181,7 +209,12 @@ Register-PowerToolsModule `
         $Global:AV_startBtn.Content    = if ($Busy) { "Downloading..." } else { "Start Download" }
     }
 
+    # Timer starten (vorherigen stoppen)
     function Global:AV-StartTimer {
+        if ($Global:AV_timer) {
+            $Global:AV_timer.Stop()
+            $Global:AV_timer = $null
+        }
         $Global:AV_timer = New-Object System.Windows.Threading.DispatcherTimer
         $Global:AV_timer.Interval = [TimeSpan]::FromMilliseconds(200)
         $Global:AV_timer.Add_Tick({
@@ -199,19 +232,19 @@ Register-PowerToolsModule `
                         $Global:AV_progress.Value         = 100
                         $Global:AV_pctLabel.Text          = "100%"
                         $Global:AV_statusLabel.Text       = "All downloads complete."
-                        $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["Success"]
+                        $Global:AV_statusLabel.Foreground = Get-ThemeBrush "Success" "Green"
                         AV-SetUI-Busy $false
                     }
                     "CANCELLED" {
                         $Global:AV_timer.Stop()
                         $Global:AV_statusLabel.Text       = "Cancelled."
-                        $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["Warning"]
+                        $Global:AV_statusLabel.Foreground = Get-ThemeBrush "Warning" "Orange"
                         AV-SetUI-Busy $false
                     }
                     "ERROR"     {
                         $Global:AV_timer.Stop()
                         $Global:AV_statusLabel.Text       = "Error during download."
-                        $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
+                        $Global:AV_statusLabel.Foreground = Get-ThemeBrush "Danger" "Red"
                         AV-SetUI-Busy $false
                     }
                 }
@@ -221,9 +254,9 @@ Register-PowerToolsModule `
     }
 
     # ===========================================================================
-    # DOWNLOAD WORKER SCRIPT (executes inside RunspacePool)
+    # DOWNLOAD WORKER SCRIPT (ausgeführt im RunspacePool)
     # ===========================================================================
-    $Global:AV_dlScript = {
+    $Global:AV_dlScript = @'
         param(
             [hashtable]$Job,
             [System.Collections.Concurrent.ConcurrentQueue[object]]$Queue,
@@ -246,7 +279,7 @@ Register-PowerToolsModule `
 
         Q-Log "Starting: $name" "INFO"
 
-        # Skip if fresh copy exists (< 24h)
+        # Überspringen, wenn frische Kopie (< 24h) existiert
         if (Test-Path $outFile) {
             $age = (Get-Date) - (Get-Item $outFile).LastWriteTime
             if ($age.TotalHours -lt 24) {
@@ -318,7 +351,6 @@ Register-PowerToolsModule `
             } catch {
                 if ($null -ne $fs) { try { $fs.Close() } catch {} }
                 if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -EA SilentlyContinue }
-                # FIX 1: $_ und $name: sicher in Strings einbetten
                 $errMsg = $_.ToString()
                 Q-Log "${name}: URL failed ($tryUrl) - $errMsg" "WARN"
             }
@@ -327,10 +359,10 @@ Register-PowerToolsModule `
         Q-Log "FAILED: $name - all URLs exhausted." "FAIL"
         $result.Message = "All URLs failed"
         return $result
-    }
+'@
 
     # ===========================================================================
-    # SCANNER JOB LIST
+    # SCANNER JOB LIST (mit verbesserten Fallback-URLs)
     # ===========================================================================
     function Global:AV-GetScannerList {
         param([string]$Dest)
@@ -344,12 +376,13 @@ Register-PowerToolsModule `
             }
         }
         if ($Global:AV_cbKVRT.IsChecked) {
+            # KEIN Fallback auf HTML-Seite – besser nur einen soliden direkten Link
             $list += @{
-                Name        = "Kaspersky KVRT"
-                FileName    = "KVRT.exe"
-                Url         = "https://devapps.kaspersky.com/mcc/static/kvrt/en-US/vital-product/KVRT.exe"
-                FallbackUrl = "https://www.kaspersky.com/downloads/free-virus-removal-tool"
-                OutFile     = Join-Path $Dest "KVRT.exe"
+                Name     = "Kaspersky KVRT"
+                FileName = "KVRT.exe"
+                Url      = "https://devapps.kaspersky.com/mcc/static/kvrt/en-US/vital-product/KVRT.exe"
+                # Fallback entfernt, da die alte "FallbackUrl" keine EXE war.
+                OutFile  = Join-Path $Dest "KVRT.exe"
             }
         }
         if ($Global:AV_cbAdwCleaner.IsChecked) {
@@ -377,7 +410,8 @@ Register-PowerToolsModule `
     $Global:AV_startBtn.Add_Click({
         $dest = $Global:AV_destBox.Text.Trim()
         if ([string]::IsNullOrWhiteSpace($dest)) {
-            AV-AddLog "No destination folder specified." "FAIL"; return
+            AV-AddLog "No destination folder specified." "FAIL"
+            return
         }
         if (-not (Test-Path $dest)) {
             try {
@@ -385,20 +419,27 @@ Register-PowerToolsModule `
                 AV-AddLog "Created folder: $dest" "INFO"
             } catch {
                 $errMsg = $_.ToString()
-                AV-AddLog "Cannot create folder: $dest - $errMsg" "FAIL"; return
+                AV-AddLog "Cannot create folder: $dest - $errMsg" "FAIL"
+                return
             }
         }
 
         $scanners = AV-GetScannerList -Dest $dest
         if ($scanners.Count -eq 0) {
-            AV-AddLog "No scanners selected." "WARN"; return
+            AV-AddLog "No scanners selected." "WARN"
+            return
         }
 
+        # Vorherigen Cancel-Token abbrechen und neuen erstellen
+        if ($Global:AV_cancelFlag) {
+            try { $Global:AV_cancelFlag.Cancel() } catch {}
+            $Global:AV_cancelFlag.Dispose()
+        }
         $Global:AV_cancelFlag = [System.Threading.CancellationTokenSource]::new()
 
         $Global:AV_progress.Value         = 0
         $Global:AV_pctLabel.Text          = "0%"
-        $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
+        $Global:AV_statusLabel.Foreground = Get-ThemeBrush "TextMuted" "Gray"
         $Global:AV_statusLabel.Text       = "Starting..."
         AV-SetUI-Busy $true
         AV-StartTimer
@@ -409,52 +450,60 @@ Register-PowerToolsModule `
         $capturedToken    = $Global:AV_cancelFlag.Token
         $capturedScript   = $Global:AV_dlScript
 
-        $null = [System.Threading.Tasks.Task]::Run([Action]{
-            $maxThreads = [math]::Min($capturedTotal, 4)
-            $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $maxThreads)
-            $pool.Open()
+        $null = [System.Threading.Tasks.Task]::Run({
+            try {
+                $maxThreads = [math]::Min($capturedTotal, 4)
+                $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $maxThreads)
+                $pool.Open()
 
-            $jobs = [System.Collections.Generic.List[hashtable]]::new()
-            foreach ($scanner in $capturedScanners) {
-                if ($capturedToken.IsCancellationRequested) { break }
-                $ps = [System.Management.Automation.PowerShell]::Create()
-                $ps.RunspacePool = $pool
-                # FIX 2: Method-Chaining ohne Backtick-Continuation
-                $null = $ps.AddScript($capturedScript).AddArgument($scanner).AddArgument($capturedQueue).AddArgument($capturedToken)
-                $jobs.Add(@{ PS=$ps; Handle=$ps.BeginInvoke(); Done=$false })
-            }
+                $jobs = [System.Collections.Generic.List[hashtable]]::new()
+                foreach ($scanner in $capturedScanners) {
+                    if ($capturedToken.IsCancellationRequested) { break }
+                    $ps = [System.Management.Automation.PowerShell]::Create()
+                    $ps.RunspacePool = $pool
+                    # Wichtig: Skript als String übergeben (nicht Block)
+                    $null = $ps.AddScript($capturedScript.ToString()).AddArgument($scanner).AddArgument($capturedQueue).AddArgument($capturedToken)
+                    $jobs.Add(@{ PS=$ps; Handle=$ps.BeginInvoke(); Done=$false })
+                }
 
-            $done = 0
-            while ($done -lt $jobs.Count) {
-                Start-Sleep -Milliseconds 300
-                foreach ($j in $jobs) {
-                    if (-not $j.Done -and $j.Handle.IsCompleted) {
-                        $j["Done"] = $true
-                        $done++
-                        try { $j.PS.EndInvoke($j.Handle) } catch {
-                            $errMsg = $_.ToString()
+                $done = 0
+                while ($done -lt $jobs.Count) {
+                    Start-Sleep -Milliseconds 300
+                    foreach ($j in $jobs) {
+                        if (-not $j.Done -and $j.Handle.IsCompleted) {
+                            $j["Done"] = $true
+                            $done++
+                            try {
+                                $j.PS.EndInvoke($j.Handle)
+                            } catch {
+                                $errMsg = $_.ToString()
+                                $capturedQueue.Enqueue([PSCustomObject]@{
+                                    Type="LOG"; Msg="Worker error: $errMsg"; Tag="FAIL"
+                                })
+                            }
+                            $j.PS.Dispose()
+                            $pct = [int](($done / $capturedTotal) * 100)
                             $capturedQueue.Enqueue([PSCustomObject]@{
-                                Type="LOG"; Msg="Worker error: $errMsg"; Tag="FAIL"
+                                Type="PROGRESS"; Pct=$pct
+                                Status="Completed $done of $capturedTotal scanner(s)"
                             })
                         }
-                        $j.PS.Dispose()
-                        $pct = [int](($done / $capturedTotal) * 100)
-                        $capturedQueue.Enqueue([PSCustomObject]@{
-                            Type="PROGRESS"; Pct=$pct
-                            Status="Completed $done of $capturedTotal scanner(s)"
-                        })
                     }
                 }
-            }
 
-            $pool.Close()
-            $pool.Dispose()
+                $pool.Close()
+                $pool.Dispose()
 
-            if ($capturedToken.IsCancellationRequested) {
-                $capturedQueue.Enqueue([PSCustomObject]@{ Type="CANCELLED" })
-            } else {
-                $capturedQueue.Enqueue([PSCustomObject]@{ Type="LOG"; Msg="All downloads finished."; Tag="OK" })
-                $capturedQueue.Enqueue([PSCustomObject]@{ Type="DONE" })
+                if ($capturedToken.IsCancellationRequested) {
+                    $capturedQueue.Enqueue([PSCustomObject]@{ Type="CANCELLED" })
+                } else {
+                    $capturedQueue.Enqueue([PSCustomObject]@{ Type="LOG"; Msg="All downloads finished."; Tag="OK" })
+                    $capturedQueue.Enqueue([PSCustomObject]@{ Type="DONE" })
+                }
+            } catch {
+                $errMsg = $_.ToString()
+                $capturedQueue.Enqueue([PSCustomObject]@{ Type="LOG"; Msg="Fatal error in download task: $errMsg"; Tag="FAIL" })
+                $capturedQueue.Enqueue([PSCustomObject]@{ Type="ERROR" })
             }
         })
     })
@@ -463,8 +512,10 @@ Register-PowerToolsModule `
     # CANCEL HANDLER
     # ===========================================================================
     $Global:AV_cancelBtn.Add_Click({
-        $Global:AV_cancelFlag.Cancel()
-        AV-AddLog "Cancel requested..." "WARN"
+        if ($Global:AV_cancelFlag) {
+            $Global:AV_cancelFlag.Cancel()
+            AV-AddLog "Cancel requested..." "WARN"
+        }
     })
 
     # ===========================================================================
@@ -489,3 +540,4 @@ Register-PowerToolsModule `
 
     return $view
 }
+```
