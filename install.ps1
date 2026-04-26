@@ -4,35 +4,28 @@
     PowerTools Suite Installer
 .DESCRIPTION
     Downloads and installs PowerTools Suite from GitHub.
+    Dynamically discovers all modules and assets via GitHub API.
     Launches main application after installation.
 .NOTES
     Author  : ReAlNoMo
-    Version : 1.2
+    Version : 1.3
 #>
 
 $ErrorActionPreference = "Stop"
-$ProgressPreference    = "SilentlyContinue"   # Faster Invoke-WebRequest
+$ProgressPreference    = "SilentlyContinue"
 
 # ===========================================================================
 # CONFIG
 # ===========================================================================
-$InstallPath = Join-Path $env:LOCALAPPDATA "PowerTools-Suite"
-$TempPath    = Join-Path $env:TEMP "PTS-Install-$([System.Guid]::NewGuid().ToString('N'))"
-$GitHubRaw   = "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main"
-$MaxRetries  = 3
+$InstallPath  = Join-Path $env:LOCALAPPDATA "PowerTools-Suite"
+$TempPath     = Join-Path $env:TEMP "PTS-Install-$([System.Guid]::NewGuid().ToString('N'))"
+$GitHubRaw    = "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main"
+$GitHubAPI    = "https://api.github.com/repos/ReAlNoMo/PowerToolsSuite_Win/contents"
+$MaxRetries   = 3
 
 $CoreFiles = @(
     "PS-PowerToolsSuite.ps1",
     "README.md"
-)
-
-$ModuleFiles = @(
-    "01-HashVerifier.ps1",
-    "02-ExplorerViewNormalizer.ps1",
-    "03-HardwareInventory.ps1",
-    "04-SandboxieBrowserLauncher.ps1",
-    "05-GamingOptimizer.ps1",
-    "06-LinuxISODownloader.ps1"
 )
 
 # ===========================================================================
@@ -57,10 +50,8 @@ function Invoke-DownloadFile {
         [string]$Url,
         [string]$Destination
     )
-
     $attempt = 0
     $lastErr  = $null
-
     while ($attempt -lt $MaxRetries) {
         $attempt++
         try {
@@ -75,12 +66,31 @@ function Invoke-DownloadFile {
             }
         }
     }
-
     throw "Download failed after $MaxRetries attempts: $Url`n$lastErr"
 }
 
 # ===========================================================================
-# VERIFY FILE EXISTS AND HAS CONTENT
+# GITHUB API: GET FILE LIST FOR A FOLDER
+# ===========================================================================
+function Get-GitHubFileList {
+    param(
+        [string]$FolderPath
+    )
+    try {
+        $apiUrl  = "$GitHubAPI/$FolderPath"
+        $headers = @{ "User-Agent" = "PowerTools-Suite-Installer" }
+        $resp    = Invoke-WebRequest -Uri $apiUrl -Headers $headers -UseBasicParsing -TimeoutSec 20
+        $items   = ($resp.Content | ConvertFrom-Json)
+        return ($items | Where-Object { $_.type -eq "file" } | Select-Object -ExpandProperty name)
+    }
+    catch {
+        Write-Log "GitHub API call failed for '$FolderPath': $_" "WARN"
+        return @()
+    }
+}
+
+# ===========================================================================
+# VERIFY FILE
 # ===========================================================================
 function Test-FileValid {
     param([string]$Path)
@@ -92,12 +102,12 @@ function Test-FileValid {
 # MAIN
 # ===========================================================================
 Write-Host ""
-Write-Log "PowerTools Suite Installer v1.2" "INFO"
-Write-Log "Install target : $InstallPath"    "INFO"
-Write-Log "Temp work dir  : $TempPath"       "INFO"
+Write-Log "PowerTools Suite Installer v1.3" "INFO"
+Write-Log "Install target : $InstallPath"   "INFO"
+Write-Log "Temp work dir  : $TempPath"      "INFO"
 Write-Host ""
 
-# Check internet connectivity
+# Check connectivity
 Write-Log "Checking connectivity..." "INFO"
 try {
     $null = Invoke-WebRequest -Uri "https://raw.githubusercontent.com" -UseBasicParsing -TimeoutSec 10 -Method Head
@@ -109,10 +119,11 @@ catch {
     exit 1
 }
 
-# Create temp directory
+# Create temp directories
 try {
-    New-Item -ItemType Directory -Path $TempPath -Force | Out-Null
-    New-Item -ItemType Directory -Path (Join-Path $TempPath "modules") -Force | Out-Null
+    New-Item -ItemType Directory -Path $TempPath                          -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $TempPath "modules")    -Force | Out-Null
+    New-Item -ItemType Directory -Path (Join-Path $TempPath "logo")       -Force | Out-Null
 }
 catch {
     Write-Log "Failed to create temp directory: $_" "ERR"
@@ -120,6 +131,34 @@ catch {
 }
 
 try {
+    # -----------------------------------------------------------------------
+    # DISCOVER MODULES VIA GITHUB API
+    # -----------------------------------------------------------------------
+    Write-Host ""
+    Write-Log "Discovering modules from GitHub..." "INFO"
+    $ModuleFiles = Get-GitHubFileList -FolderPath "modules"
+    $ModuleFiles = $ModuleFiles | Where-Object { $_ -match "\.ps1$" }
+
+    if ($ModuleFiles.Count -eq 0) {
+        Write-Log "No modules found via API. Check repo or API rate limit." "ERR"
+        throw "Module discovery returned 0 files."
+    }
+    Write-Log "Found $($ModuleFiles.Count) module(s): $($ModuleFiles -join ', ')" "OK"
+
+    # -----------------------------------------------------------------------
+    # DISCOVER LOGO FILES VIA GITHUB API
+    # -----------------------------------------------------------------------
+    Write-Host ""
+    Write-Log "Discovering logo assets from GitHub..." "INFO"
+    $LogoFiles = Get-GitHubFileList -FolderPath "logo"
+
+    if ($LogoFiles.Count -eq 0) {
+        Write-Log "No logo files found. Logo folder may be empty." "WARN"
+    }
+    else {
+        Write-Log "Found $($LogoFiles.Count) logo file(s): $($LogoFiles -join ', ')" "OK"
+    }
+
     # -----------------------------------------------------------------------
     # DOWNLOAD CORE FILES
     # -----------------------------------------------------------------------
@@ -130,7 +169,6 @@ try {
         $url  = "$GitHubRaw/$file"
         $dest = Join-Path $TempPath $file
         Write-Host "  Downloading $file... " -NoNewline -ForegroundColor Gray
-
         try {
             Invoke-DownloadFile -Url $url -Destination $dest
             if (-not (Test-FileValid $dest)) { throw "File empty or missing after download" }
@@ -153,7 +191,6 @@ try {
         $url  = "$GitHubRaw/modules/$mod"
         $dest = Join-Path $TempPath "modules\$mod"
         Write-Host "  Downloading $mod... " -NoNewline -ForegroundColor Gray
-
         try {
             Invoke-DownloadFile -Url $url -Destination $dest
             if (-not (Test-FileValid $dest)) { throw "File empty or missing after download" }
@@ -167,7 +204,30 @@ try {
     }
 
     # -----------------------------------------------------------------------
-    # VERIFY LAUNCHER EXISTS IN TEMP
+    # DOWNLOAD LOGO FILES
+    # -----------------------------------------------------------------------
+    if ($LogoFiles.Count -gt 0) {
+        Write-Host ""
+        Write-Log "Downloading logo assets..." "INFO"
+
+        foreach ($logo in $LogoFiles) {
+            $url  = "$GitHubRaw/logo/$logo"
+            $dest = Join-Path $TempPath "logo\$logo"
+            Write-Host "  Downloading $logo... " -NoNewline -ForegroundColor Gray
+            try {
+                Invoke-DownloadFile -Url $url -Destination $dest
+                if (-not (Test-FileValid $dest)) { throw "File empty or missing after download" }
+                Write-Host "OK" -ForegroundColor Green
+            }
+            catch {
+                Write-Host "FAIL" -ForegroundColor Red
+                Write-Log "Logo download failed (non-critical): $logo - $_" "WARN"
+            }
+        }
+    }
+
+    # -----------------------------------------------------------------------
+    # VERIFY LAUNCHER IN TEMP
     # -----------------------------------------------------------------------
     $tempLauncher = Join-Path $TempPath "PS-PowerToolsSuite.ps1"
     if (-not (Test-FileValid $tempLauncher)) {
@@ -183,7 +243,6 @@ try {
     if (Test-Path $InstallPath) {
         Write-Log "Removing existing installation..." "WARN"
 
-        # Kill any running PowerTools Suite instances first
         Get-Process -Name "pwsh" -ErrorAction SilentlyContinue | Where-Object {
             $_.MainWindowTitle -like "*PowerTools*"
         } | ForEach-Object {
@@ -234,6 +293,13 @@ try {
     }
 
     # -----------------------------------------------------------------------
+    # SUMMARY
+    # -----------------------------------------------------------------------
+    Write-Host ""
+    Write-Log "Installed $($ModuleFiles.Count) module(s)" "OK"
+    Write-Log "Installed $($LogoFiles.Count) logo file(s)" "OK"
+
+    # -----------------------------------------------------------------------
     # LAUNCH
     # -----------------------------------------------------------------------
     Write-Host ""
@@ -258,7 +324,6 @@ catch {
     Write-Host ""
     Write-Log "Installation failed: $_" "ERR"
 
-    # Cleanup temp on failure
     if (Test-Path $TempPath) {
         Remove-Item -Path $TempPath -Recurse -Force -ErrorAction SilentlyContinue
     }
