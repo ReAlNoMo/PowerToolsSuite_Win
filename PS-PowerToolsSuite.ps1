@@ -75,7 +75,7 @@ $Global:PTS_Theme = @{
     Primary              = "#3B5BDB"
     PrimaryDark          = "#2F4AC2"
     PrimaryHover         = "#2540A8"
-    SidebarBg            = "#101D51"
+    SidebarBg            = "#1A2254"
     SidebarDivider       = "#232D6B"
     SidebarHover         = "#2A3470"
     SidebarActive        = "#3B5BDB"
@@ -125,7 +125,7 @@ $Global:PTS_ThemeDark = @{
     SidebarText          = "#8890B8"
     SidebarTextActive    = "#FFFFFF"
     Background           = "#0F1429"
-    Surface              = "#101D51"
+    Surface              = "#1A2254"
     Border               = "#2A3580"
     TextDark             = "#E0E6FF"
     TextMid              = "#B0B8E8"
@@ -142,7 +142,7 @@ $Global:PTS_ThemeDark = @{
     BtnSecBorder         = "#2A3580"
     BtnSecHover          = "#263070"
     BtnSecHoverBorder    = "#5B7FFF"
-    TileBg               = "#101D51"
+    TileBg               = "#1A2254"
     TileBorder           = "#2A3580"
     TileHoverBg          = "#1E2A6A"
     TileHoverBorder      = "#5B7FFF"
@@ -194,6 +194,8 @@ function Global:Apply-PTSTheme {
         $Global:PTS_UI.FooterMid.Foreground       = $Global:PTS_Brush["TextFaint"]
         $Global:PTS_UI.SidebarDivTop.Background   = $Global:PTS_Brush["SidebarDivider"]
         $Global:PTS_UI.SidebarDivBot.Background   = $Global:PTS_Brush["SidebarDivider"]
+        $Global:PTS_UI.LogoText.Foreground        = $Global:PTS_Brush["SidebarTextActive"]
+        $Global:PTS_UI.LogoSub.Foreground         = $Global:PTS_Brush["SidebarText"]
         $Global:PTS_UI.DarkModeLabel.Foreground   = $Global:PTS_Brush["SidebarText"]
 
         # Update WPF resource styles for buttons/tiles/inputs
@@ -367,7 +369,7 @@ function Global:Update-PTSStyles {
         </Style>
 
         <Style x:Key="SidebarButton" TargetType="Button">
-            <Setter Property="Background"             Value="#101D51"/>
+            <Setter Property="Background"             Value="#1A2254"/>
             <Setter Property="BorderThickness"        Value="0"/>
             <Setter Property="Cursor"                 Value="Hand"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -397,7 +399,7 @@ function Global:Update-PTSStyles {
 
         <Grid Grid.Row="1" Grid.IsSharedSizeScope="True">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="260"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
@@ -408,7 +410,7 @@ function Global:Update-PTSStyles {
             </Grid.RowDefinitions>
 
             <!-- SIDEBAR LOGO - Row 0, Col 0 - same row as header -->
-            <Grid x:Name="SidebarGrid" Grid.Column="0" Grid.Row="0" Grid.RowSpan="4" Background="#101D51">
+            <Grid x:Name="SidebarGrid" Grid.Column="0" Grid.Row="0" Grid.RowSpan="4" Background="#1A2254">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" SharedSizeGroup="HeaderRow"/>
                     <RowDefinition Height="Auto"/>
@@ -418,10 +420,10 @@ function Global:Update-PTSStyles {
                 </Grid.RowDefinitions>
 
                 <!-- LOGO IMAGE -->
-                <Border Grid.Row="0" Padding="8,12,8,12" Background="#101D51">
+                <Border Grid.Row="0" Padding="8,8,8,8" Background="#101D51">
                     <Image Source="https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/logo/PowerToolsSuite_Logo_02_cut.png"
                            Stretch="UniformToFill"
-                           MaxHeight="60"/>
+                           Height="80"/>
                 </Border>
 
                 <Border x:Name="SidebarDivTop" Grid.Row="1" Height="1" Background="#232D6B"/>
@@ -500,7 +502,7 @@ function Global:Update-PTSStyles {
         <Border x:Name="FooterBorder" Grid.Row="2" Background="#FFFFFF" BorderBrush="#E0E5F5" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="260"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -550,6 +552,8 @@ $Global:PTS_UI = @{
     BackBtn          = $Global:PTS_Window.FindName("BackBtn")
     DarkModeToggle   = $Global:PTS_Window.FindName("DarkModeToggle")
     DarkModeLabel    = $Global:PTS_Window.FindName("DarkModeLabel")
+    LogoText         = $Global:PTS_Window.FindName("LogoText")
+    LogoSub          = $Global:PTS_Window.FindName("LogoSub")
 }
 
 $Global:PTS_UI.DarkModeToggle.Add_Click({
