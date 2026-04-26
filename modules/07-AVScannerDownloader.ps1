@@ -104,6 +104,9 @@ Register-PowerToolsModule `
                        FontWeight="Bold" Margin="12,8,0,4"/>
             <TextBox Grid.Row="1" x:Name="LogBox"
                      IsReadOnly="True"
+                     IsReadOnlyCaretVisible="True"
+                     Focusable="True"
+                     IsTabStop="True"
                      AcceptsReturn="True"
                      TextWrapping="Wrap"
                      VerticalScrollBarVisibility="Auto"
@@ -189,8 +192,27 @@ Register-PowerToolsModule `
 
     $Global:AV_logBox.Add_PreviewMouseWheel({
         param($sender, $e)
-        if ($e.Delta -gt 0) { $sender.LineUp() } else { $sender.LineDown() }
-        $e.Handled = $true
+        try {
+            $sv = $sender.Template.FindName("PART_ContentHost", $sender)
+            if ($sv -is [System.Windows.Controls.ScrollViewer]) {
+                $step = if ($e.Delta -gt 0) { -3 } else { 3 }
+                $newOffset = $sv.VerticalOffset + $step
+                if ($newOffset -lt 0) { $newOffset = 0 }
+                if ($newOffset -gt $sv.ScrollableHeight) { $newOffset = $sv.ScrollableHeight }
+                $sv.ScrollToVerticalOffset($newOffset)
+                $e.Handled = $true
+            }
+        } catch {
+            # keep default behavior
+        }
+    })
+
+    $Global:AV_logBox.Add_PreviewKeyDown({
+        param($sender, $e)
+        if (($e.KeyboardDevice.Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -and $e.Key -eq [System.Windows.Input.Key]::A) {
+            $sender.SelectAll()
+            $e.Handled = $true
+        }
     })
 
     function Global:AV-SetUI-Busy {
@@ -288,7 +310,7 @@ Register-PowerToolsModule `
             $req.ReadWriteTimeout = 30000
             $req.AllowAutoRedirect = $true
             $req.AutomaticDecompression = [System.Net.DecompressionMethods]::GZip -bor [System.Net.DecompressionMethods]::Deflate
-            $req.Accept = "application/octet-stream,application/x-msdownload,application/vnd.microsoft.portable-executable,text/html,*/*"
+            $req.Accept = "application/octet-stream,application/x-msdownload,application/x-msdos-program,application/vnd.microsoft.portable-executable,text/html,*/*"
             return $req
         }
 
@@ -357,13 +379,16 @@ Register-PowerToolsModule `
                     }
 
                     if (-not $candidate) { continue }
+                    $candidate = $candidate.Trim()
+                    $candidate = $candidate.Trim('"', "'")
+                    while ($candidate.EndsWith(")") -or $candidate.EndsWith(";") -or $candidate.EndsWith(":") -or $candidate.EndsWith(",")) {
+                        $candidate = $candidate.Substring(0, $candidate.Length - 1)
+                    }
+                    if ($candidate -notmatch '^https?://') { continue }
                     if (-not (Is-AllowedHost -Url $candidate -AllowedHosts $AllowedHosts)) { continue }
 
-                    if ($candidate -match '\.exe($|\?)' -or
-                        $candidate -match 'adwcleaner' -or
-                        $candidate -match 'kvrt' -or
-                        $candidate -match 'housecall' -or
-                        $candidate -match 'emergencykit') {
+                    # Only enqueue executable candidates to avoid CSS/image junk URLs.
+                    if ($candidate -match '\.exe($|\?)') {
                         Add-CandidateUrl -List $out -Url $candidate
                     }
                 }
@@ -462,7 +487,7 @@ Register-PowerToolsModule `
                 try { $cd = "$($resp.Headers['Content-Disposition'])".ToLowerInvariant() } catch {}
 
                 $looksBinary = $false
-                if ($contentType -match 'application/octet-stream|application/x-msdownload|application/vnd.microsoft.portable-executable') { $looksBinary = $true }
+                if ($contentType -match 'application/octet-stream|application/x-msdownload|application/x-msdos-program|application/vnd.microsoft.portable-executable') { $looksBinary = $true }
                 if ($finalUrl -match '\.exe($|\?)') { $looksBinary = $true }
                 if ($cd -match '\.exe') { $looksBinary = $true }
 
@@ -692,8 +717,10 @@ Register-PowerToolsModule `
             $list += @{
                 Name           = "Trend Micro HouseCall"
                 FileName       = "HousecallLauncher64.exe"
-                Url            = "https://housecall.trendmicro.com/housecall/downloads/HousecallLauncher64.exe"
+                Url            = "https://go.trendmicro.com/housecall8/r2/HousecallLauncher64.exe"
                 FallbackUrls   = @(
+                    "https://go.trendmicro.com/housecall8/r2/HousecallLauncher.exe",
+                    "https://housecall.trendmicro.com/housecall/downloads/HousecallLauncher64.exe",
                     "https://us.shop.trendmicro.com/en_us/products/house-call.asp",
                     "https://shop.trendmicro.com/en_us/products/house-call.asp",
                     "https://www.trendmicro.com/en_us/forHome/products/housecall.html"

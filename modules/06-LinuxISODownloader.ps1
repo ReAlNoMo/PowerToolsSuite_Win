@@ -108,6 +108,9 @@ Register-PowerToolsModule `
             BorderThickness="1.5" CornerRadius="10">
         <TextBox x:Name="LogBox"
                  IsReadOnly="True"
+                 IsReadOnlyCaretVisible="True"
+                 Focusable="True"
+                 IsTabStop="True"
                  AcceptsReturn="True"
                  TextWrapping="Wrap"
                  VerticalScrollBarVisibility="Auto"
@@ -177,8 +180,27 @@ Register-PowerToolsModule `
 
     $Global:ISO_logBox.Add_PreviewMouseWheel({
         param($sender, $e)
-        if ($e.Delta -gt 0) { $sender.LineUp() } else { $sender.LineDown() }
-        $e.Handled = $true
+        try {
+            $sv = $sender.Template.FindName("PART_ContentHost", $sender)
+            if ($sv -is [System.Windows.Controls.ScrollViewer]) {
+                $step = if ($e.Delta -gt 0) { -3 } else { 3 }
+                $newOffset = $sv.VerticalOffset + $step
+                if ($newOffset -lt 0) { $newOffset = 0 }
+                if ($newOffset -gt $sv.ScrollableHeight) { $newOffset = $sv.ScrollableHeight }
+                $sv.ScrollToVerticalOffset($newOffset)
+                $e.Handled = $true
+            }
+        } catch {
+            # keep default behavior
+        }
+    })
+
+    $Global:ISO_logBox.Add_PreviewKeyDown({
+        param($sender, $e)
+        if (($e.KeyboardDevice.Modifiers -band [System.Windows.Input.ModifierKeys]::Control) -and $e.Key -eq [System.Windows.Input.Key]::A) {
+            $sender.SelectAll()
+            $e.Handled = $true
+        }
     })
 
     function Global:ISO-SetUI-Busy {
