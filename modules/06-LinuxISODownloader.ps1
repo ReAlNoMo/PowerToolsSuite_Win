@@ -161,6 +161,21 @@ Register-PowerToolsModule `
     $Global:ISO_destBox.Background  = $Global:PTS_Brush["InputBg"]
     $Global:ISO_destBox.Foreground  = $Global:PTS_Brush["InputFg"]
     $Global:ISO_destBox.BorderBrush = $Global:PTS_Brush["Border"]
+    $Global:ISO_cbUbuntu.Foreground = $Global:PTS_Brush["TextMid"]
+    $Global:ISO_cbDebian.Foreground = $Global:PTS_Brush["TextMid"]
+    $Global:ISO_cbFedora.Foreground = $Global:PTS_Brush["TextMid"]
+    $Global:ISO_cbArch.Foreground   = $Global:PTS_Brush["TextMid"]
+    $Global:ISO_cbCachyOS.Foreground= $Global:PTS_Brush["TextMid"]
+    $Global:ISO_cbPopOS.Foreground  = $Global:PTS_Brush["TextMid"]
+    $Global:ISO_parallel.Foreground = $Global:PTS_Brush["InputFg"]
+    $Global:ISO_parallel.Background = $Global:PTS_Brush["InputBg"]
+    $Global:ISO_parallel.BorderBrush= $Global:PTS_Brush["Border"]
+    foreach ($cbItem in $Global:ISO_parallel.Items) {
+        if ($cbItem -is [System.Windows.Controls.ComboBoxItem]) {
+            $cbItem.Foreground = $Global:PTS_Brush["InputFg"]
+            $cbItem.Background = $Global:PTS_Brush["InputBg"]
+        }
+    }
     $Global:ISO_logBox.Foreground   = $Global:PTS_Brush["TextMuted"]
     $Global:ISO_logBorder.Background   = $Global:PTS_Brush["LogBg"]
     $Global:ISO_logBorder.BorderBrush  = $Global:PTS_Brush["LogBorder"]
@@ -178,10 +193,23 @@ Register-PowerToolsModule `
         $Global:ISO_logBox.ScrollToEnd()
     }
 
-    $Global:ISO_logBox.Add_PreviewMouseWheel({
+    function Global:ISO-GetInnerScrollViewer {
+        param([System.Windows.DependencyObject]$Root)
+        if ($null -eq $Root) { return $null }
+        if ($Root -is [System.Windows.Controls.ScrollViewer]) { return $Root }
+        $count = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($Root)
+        for ($idx = 0; $idx -lt $count; $idx++) {
+            $child = [System.Windows.Media.VisualTreeHelper]::GetChild($Root, $idx)
+            $found = ISO-GetInnerScrollViewer -Root $child
+            if ($null -ne $found) { return $found }
+        }
+        return $null
+    }
+
+    $wheelHandlerISO = [System.Windows.Input.MouseWheelEventHandler]{
         param($sender, $e)
         try {
-            $sv = $sender.Template.FindName("PART_ContentHost", $sender)
+            $sv = ISO-GetInnerScrollViewer -Root $sender
             if ($sv -is [System.Windows.Controls.ScrollViewer]) {
                 $step = if ($e.Delta -gt 0) { -3 } else { 3 }
                 $newOffset = $sv.VerticalOffset + $step
@@ -193,7 +221,9 @@ Register-PowerToolsModule `
         } catch {
             # keep default behavior
         }
-    })
+    }
+    $Global:ISO_logBox.AddHandler([System.Windows.UIElement]::PreviewMouseWheelEvent, $wheelHandlerISO, $true)
+    $Global:ISO_logBox.AddHandler([System.Windows.UIElement]::MouseWheelEvent,        $wheelHandlerISO, $true)
 
     $Global:ISO_logBox.Add_PreviewKeyDown({
         param($sender, $e)
@@ -446,55 +476,108 @@ Register-PowerToolsModule `
     # DOWNLOAD ORCHESTRATOR
     # ===========================================================================
     function Global:ISO-RunDownloads {
-        param($Jobs, [System.Threading.CancellationToken]$CancelToken)
+        param(
+            [object[]]$Jobs,
+            [System.Threading.CancellationToken]$CancelToken,
+            [System.Collections.Concurrent.ConcurrentQueue[object]]$Queue,
+            [int]$MaxPar,
+            [scriptblock]$WorkerScript
+        )
 
-        $total   = $Jobs.Count
-        $queue   = $Global:ISO_msgQueue
-        $maxPar  = [int]($Global:ISO_parallel.SelectedItem.Content)
-        $pool    = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $maxPar)
-        $pool.Open()
+        try {
+            if (-not $Jobs -or $Jobs.Count -eq 0) {
+                $Queue.Enqueue([PSCustomObject]@{ Type = "LOG"; Msg = "No download jobs received by coordinator."; Tag = "FAIL" })
+                $Queue.Enqueue([PSCustomObject]@{ Type = "ERROR" })
+                return
+            }
 
-        $running = [System.Collections.Generic.List[object]]::new()
-        $done    = 0
+            $total = $Jobs.Count
+            if ($MaxPar -lt 1) { $MaxPar = 1 }
+            if ($MaxPar -gt $total) { $MaxPar = $total }
 
-        for ($i = 0; $i -lt $Jobs.Count; $i++) {
-            $ps = [System.Management.Automation.PowerShell]::Create()
-            $ps.RunspacePool = $pool
-            $ps.AddScript($Global:ISO_WorkerScript) | Out-Null
-            $ps.AddParameter("Job",       $Jobs[$i])    | Out-Null
-            $ps.AddParameter("Queue",     $queue)       | Out-Null
-            $ps.AddParameter("CancelToken", $CancelToken) | Out-Null
-            $ps.AddParameter("TotalJobs", $total)       | Out-Null
-            $ps.AddParameter("JobIndex",  $i)           | Out-Null
-            $j = [PSCustomObject]@{ PS=$ps; Handle=$ps.BeginInvoke(); Job=$Jobs[$i]; Done=$false }
-            $running.Add($j)
-        }
+            $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $MaxPar)
+            $pool.Open()
 
-        while ($done -lt $running.Count) {
-            Start-Sleep -Milliseconds 300
-            foreach ($r in $running) {
-                if ($r.Handle.IsCompleted -and -not $r.Done) {
-                    $r.Done = $true; $done++
-                    try {
-                        $res = $r.PS.EndInvoke($r.Handle)
-                    } catch {
-                        $queue.Enqueue([PSCustomObject]@{Type="LOG";Msg="Exception: $_";Tag="FAIL"})
+            $running = [System.Collections.Generic.List[object]]::new()
+            $done = 0
+            $ok = 0
+            $failed = 0
+
+            for ($i = 0; $i -lt $Jobs.Count; $i++) {
+                if ($CancelToken.IsCancellationRequested) { break }
+                $Queue.Enqueue([PSCustomObject]@{
+                    Type = "LOG"
+                    Msg  = "Queueing job: $($Jobs[$i].IsoName)"
+                    Tag  = "INFO"
+                })
+                $ps = [System.Management.Automation.PowerShell]::Create()
+                $ps.RunspacePool = $pool
+                $null = $ps.AddScript($WorkerScript).AddArgument($Jobs[$i]).AddArgument($Queue).AddArgument($CancelToken).AddArgument($total).AddArgument($i)
+                $running.Add([PSCustomObject]@{ PS = $ps; Handle = $ps.BeginInvoke(); Job = $Jobs[$i]; Done = $false })
+            }
+
+            while ($done -lt $running.Count) {
+                Start-Sleep -Milliseconds 300
+                foreach ($r in $running) {
+                    if ($r.Handle.IsCompleted -and -not $r.Done) {
+                        $r.Done = $true
+                        $done++
+                        try {
+                            $res = $r.PS.EndInvoke($r.Handle)
+                            if ($res -and $res.Count -gt 0 -and $res[0].Success) {
+                                $ok++
+                            } else {
+                                $failed++
+                                $reason = if ($res -and $res.Count -gt 0 -and $res[0].Message) { $res[0].Message } else { "No reason returned" }
+                                $Queue.Enqueue([PSCustomObject]@{
+                                    Type = "LOG"
+                                    Msg  = "Job failed: $($r.Job.IsoName) ($reason)"
+                                    Tag  = "FAIL"
+                                })
+                            }
+                        } catch {
+                            $failed++
+                            $Queue.Enqueue([PSCustomObject]@{
+                                Type = "LOG"
+                                Msg  = "Worker exception: $($_.ToString())"
+                                Tag  = "FAIL"
+                            })
+                        } finally {
+                            $r.PS.Dispose()
+                        }
+                        $pct = [int](($done / $total) * 100)
+                        $Queue.Enqueue([PSCustomObject]@{
+                            Type   = "PROGRESS"
+                            Pct    = $pct
+                            Status = "Completed $done of $total ISO(s)"
+                        })
                     }
-                    $r.PS.Dispose()
-                    $pct = [int](($done / $total) * 100)
-                    $queue.Enqueue([PSCustomObject]@{Type="PROGRESS";Pct=$pct;Status="Completed $done of $total ISO(s)"})
                 }
             }
-        }
 
-        $pool.Close()
-        $pool.Dispose()
+            $pool.Close()
+            $pool.Dispose()
 
-        if ($CancelToken.IsCancellationRequested) {
-            $queue.Enqueue([PSCustomObject]@{Type="CANCELLED"})
-        } else {
-            $queue.Enqueue([PSCustomObject]@{Type="LOG";Msg="All downloads finished.";Tag="OK"})
-            $queue.Enqueue([PSCustomObject]@{Type="DONE"})
+            if ($CancelToken.IsCancellationRequested) {
+                $Queue.Enqueue([PSCustomObject]@{ Type = "CANCELLED" })
+            } elseif ($failed -gt 0) {
+                $Queue.Enqueue([PSCustomObject]@{
+                    Type = "LOG"
+                    Msg  = "Finished with errors. Success: $ok, Failed: $failed"
+                    Tag  = "FAIL"
+                })
+                $Queue.Enqueue([PSCustomObject]@{ Type = "ERROR" })
+            } else {
+                $Queue.Enqueue([PSCustomObject]@{ Type = "LOG"; Msg = "All downloads finished."; Tag = "OK" })
+                $Queue.Enqueue([PSCustomObject]@{ Type = "DONE" })
+            }
+        } catch {
+            $Queue.Enqueue([PSCustomObject]@{
+                Type = "LOG"
+                Msg  = "Fatal coordinator error: $($_.ToString())"
+                Tag  = "FAIL"
+            })
+            $Queue.Enqueue([PSCustomObject]@{ Type = "ERROR" })
         }
     }
 
@@ -516,48 +599,74 @@ Register-PowerToolsModule `
     })
 
     $Global:ISO_startBtn.Add_Click({
-        if ($null -ne $Global:ISO_bgHandle -and -not $Global:ISO_bgHandle.IsCompleted) {
-            ISO-AddLog "A download operation is already running." "WARN"
-            return
-        }
-        ISO-CleanupBackground
+        try {
+            ISO-AddLog "Start requested." "INFO"
 
-        $dest = $Global:ISO_destBox.Text.Trim()
-        if ($dest -eq "") {
-            ISO-AddLog "No destination folder specified." "FAIL"
-            return
-        }
-        if (-not (Test-Path $dest)) {
-            try {
-                New-Item -ItemType Directory -Path $dest -Force | Out-Null
-                ISO-AddLog "Created folder: $dest" "INFO"
-            } catch {
-                ISO-AddLog "Cannot create folder: $dest" "FAIL"
+            if ($null -ne $Global:ISO_bgHandle -and -not $Global:ISO_bgHandle.IsCompleted) {
+                ISO-AddLog "A download operation is already running." "WARN"
                 return
             }
+            ISO-CleanupBackground
+
+            $dest = $Global:ISO_destBox.Text.Trim()
+            if ($dest -eq "") {
+                ISO-AddLog "No destination folder specified." "FAIL"
+                return
+            }
+            if (-not (Test-Path $dest)) {
+                try {
+                    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+                    ISO-AddLog "Created folder: $dest" "INFO"
+                } catch {
+                    ISO-AddLog "Cannot create folder: $dest" "FAIL"
+                    return
+                }
+            }
+
+            $jobs = ISO-GetJobList -Dest $dest -Token $Global:ISO_cancelFlag.Token
+            if ($jobs.Count -eq 0) {
+                ISO-AddLog "No distributions selected." "WARN"
+                return
+            }
+            ISO-AddLog "Selected distributions: $((@($jobs | ForEach-Object { $_.IsoName }) -join ', '))" "INFO"
+            ISO-AddLog "Destination: $dest" "INFO"
+
+            $Global:ISO_cancelFlag = [System.Threading.CancellationTokenSource]::new()
+            $token = $Global:ISO_cancelFlag.Token
+
+            # clear stale queue messages from previous run
+            $item = $null
+            while ($Global:ISO_msgQueue.TryDequeue([ref]$item)) {}
+
+            $Global:ISO_progress.Value         = 0
+            $Global:ISO_pctLabel.Text          = ""
+            $Global:ISO_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
+            $Global:ISO_statusLabel.Text       = "Starting..."
+            ISO-SetUI-Busy $true
+            ISO-StartTimer
+
+            $maxPar = 3
+            if ($Global:ISO_parallel.SelectedItem -and $Global:ISO_parallel.SelectedItem.Content) {
+                [void][int]::TryParse("$($Global:ISO_parallel.SelectedItem.Content)", [ref]$maxPar)
+            }
+            if ($maxPar -lt 1) { $maxPar = 1 }
+
+            $capturedJobs   = @($jobs)
+            $capturedRunner = ${function:Global:ISO-RunDownloads}
+            $capturedQueue  = $Global:ISO_msgQueue
+            $capturedWorker = $Global:ISO_WorkerScript
+
+            $Global:ISO_bgPS = [System.Management.Automation.PowerShell]::Create()
+            $null = $Global:ISO_bgPS.AddScript($capturedRunner).AddArgument($capturedJobs).AddArgument($token).AddArgument($capturedQueue).AddArgument($maxPar).AddArgument($capturedWorker)
+            $Global:ISO_bgHandle = $Global:ISO_bgPS.BeginInvoke()
+            ISO-AddLog "Download coordinator started (parallel max: $maxPar)." "INFO"
+        } catch {
+            ISO-AddLog "Failed to start download operation: $($_.ToString())" "FAIL"
+            $Global:ISO_statusLabel.Text       = "Error during startup."
+            $Global:ISO_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
+            ISO-SetUI-Busy $false
+            ISO-CleanupBackground
         }
-
-        $jobs = ISO-GetJobList -Dest $dest -Token $Global:ISO_cancelFlag.Token
-        if ($jobs.Count -eq 0) {
-            ISO-AddLog "No distributions selected." "WARN"
-            return
-        }
-
-        $Global:ISO_cancelFlag = [System.Threading.CancellationTokenSource]::new()
-        $token = $Global:ISO_cancelFlag.Token
-
-        $Global:ISO_progress.Value        = 0
-        $Global:ISO_pctLabel.Text         = ""
-        $Global:ISO_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
-        $Global:ISO_statusLabel.Text      = "Starting..."
-        ISO-SetUI-Busy $true
-        ISO-StartTimer
-
-        $capturedJobs = @($jobs)
-        $capturedRunner = ${function:Global:ISO-RunDownloads}
-        $Global:ISO_bgPS = [System.Management.Automation.PowerShell]::Create()
-        $null = $Global:ISO_bgPS.AddScript($capturedRunner).AddArgument($capturedJobs).AddArgument($token)
-        $Global:ISO_bgHandle = $Global:ISO_bgPS.BeginInvoke()
     })
 
     $Global:ISO_clearLog.Add_Click({

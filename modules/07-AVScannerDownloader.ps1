@@ -163,6 +163,10 @@ Register-PowerToolsModule `
     $Global:AV_destBox.Background     = $Global:PTS_Brush["InputBg"]
     $Global:AV_destBox.Foreground     = $Global:PTS_Brush["InputFg"]
     $Global:AV_destBox.BorderBrush    = $Global:PTS_Brush["Border"]
+    $Global:AV_cbEEK.Foreground       = $Global:PTS_Brush["TextMid"]
+    $Global:AV_cbKVRT.Foreground      = $Global:PTS_Brush["TextMid"]
+    $Global:AV_cbAdwCleaner.Foreground= $Global:PTS_Brush["TextMid"]
+    $Global:AV_cbHouseCall.Foreground = $Global:PTS_Brush["TextMid"]
     $Global:AV_logBox.Foreground      = $Global:PTS_Brush["TextMuted"]
     $Global:AV_logBorder.Background   = $Global:PTS_Brush["LogBg"]
     $Global:AV_logBorder.BorderBrush  = $Global:PTS_Brush["LogBorder"]
@@ -190,10 +194,23 @@ Register-PowerToolsModule `
         $Global:AV_logBox.ScrollToEnd()
     }
 
-    $Global:AV_logBox.Add_PreviewMouseWheel({
+    function Global:AV-GetInnerScrollViewer {
+        param([System.Windows.DependencyObject]$Root)
+        if ($null -eq $Root) { return $null }
+        if ($Root -is [System.Windows.Controls.ScrollViewer]) { return $Root }
+        $count = [System.Windows.Media.VisualTreeHelper]::GetChildrenCount($Root)
+        for ($idx = 0; $idx -lt $count; $idx++) {
+            $child = [System.Windows.Media.VisualTreeHelper]::GetChild($Root, $idx)
+            $found = AV-GetInnerScrollViewer -Root $child
+            if ($null -ne $found) { return $found }
+        }
+        return $null
+    }
+
+    $wheelHandlerAV = [System.Windows.Input.MouseWheelEventHandler]{
         param($sender, $e)
         try {
-            $sv = $sender.Template.FindName("PART_ContentHost", $sender)
+            $sv = AV-GetInnerScrollViewer -Root $sender
             if ($sv -is [System.Windows.Controls.ScrollViewer]) {
                 $step = if ($e.Delta -gt 0) { -3 } else { 3 }
                 $newOffset = $sv.VerticalOffset + $step
@@ -205,7 +222,9 @@ Register-PowerToolsModule `
         } catch {
             # keep default behavior
         }
-    })
+    }
+    $Global:AV_logBox.AddHandler([System.Windows.UIElement]::PreviewMouseWheelEvent, $wheelHandlerAV, $true)
+    $Global:AV_logBox.AddHandler([System.Windows.UIElement]::MouseWheelEvent,        $wheelHandlerAV, $true)
 
     $Global:AV_logBox.Add_PreviewKeyDown({
         param($sender, $e)
