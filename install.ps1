@@ -182,6 +182,16 @@ try {
 
     if (Test-Path $InstallPath) {
         Write-Log "Removing existing installation..." "WARN"
+
+        # Kill any running PowerTools Suite instances first
+        Get-Process -Name "pwsh" -ErrorAction SilentlyContinue | Where-Object {
+            $_.MainWindowTitle -like "*PowerTools*"
+        } | ForEach-Object {
+            Write-Log "Stopping running instance (PID $($_.Id))..." "WARN"
+            Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
+        }
+        Start-Sleep -Seconds 1
+
         try {
             Remove-Item -Path $InstallPath -Recurse -Force
             Write-Log "Existing install removed" "OK"
