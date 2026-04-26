@@ -146,6 +146,8 @@ Register-PowerToolsModule `
     $Global:ISO_msgQueue    = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
     $Global:ISO_timer       = $null
     $Global:ISO_cancelFlag  = [System.Threading.CancellationTokenSource]::new()
+    $Global:ISO_bgPS        = $null
+    $Global:ISO_bgHandle    = $null
 
     # Apply theme-aware colors to TextBox and Log border
     $Global:ISO_destBox.Background  = $Global:PTS_Brush["InputBg"]
@@ -175,6 +177,22 @@ Register-PowerToolsModule `
         $Global:ISO_startBtn.Content    = if ($Busy) { "Downloading..." } else { "Start Download" }
     }
 
+    function Global:ISO-CleanupBackground {
+        if ($null -ne $Global:ISO_bgPS) {
+            try {
+                if ($null -ne $Global:ISO_bgHandle -and $Global:ISO_bgHandle.IsCompleted) {
+                    $null = $Global:ISO_bgPS.EndInvoke($Global:ISO_bgHandle)
+                }
+            } catch {
+                # already handled
+            } finally {
+                try { $Global:ISO_bgPS.Dispose() } catch {}
+                $Global:ISO_bgPS = $null
+                $Global:ISO_bgHandle = $null
+            }
+        }
+    }
+
     function Global:ISO-QueueMsg {
         param([hashtable]$Msg)
         $Global:ISO_msgQueue.Enqueue($Msg)
@@ -202,18 +220,21 @@ Register-PowerToolsModule `
                         $Global:ISO_statusLabel.Text      = "All downloads complete."
                         $Global:ISO_statusLabel.Foreground = $Global:PTS_Brush["Success"]
                         ISO-SetUI-Busy $false
+                        ISO-CleanupBackground
                     }
                     "CANCELLED" {
                         $Global:ISO_timer.Stop()
                         $Global:ISO_statusLabel.Text      = "Cancelled."
                         $Global:ISO_statusLabel.Foreground = $Global:PTS_Brush["Warning"]
                         ISO-SetUI-Busy $false
+                        ISO-CleanupBackground
                     }
                     "ERROR" {
                         $Global:ISO_timer.Stop()
                         $Global:ISO_statusLabel.Text      = "Error."
                         $Global:ISO_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
                         ISO-SetUI-Busy $false
+                        ISO-CleanupBackground
                     }
                 }
             }
@@ -462,6 +483,12 @@ Register-PowerToolsModule `
     })
 
     $Global:ISO_startBtn.Add_Click({
+        if ($null -ne $Global:ISO_bgHandle -and -not $Global:ISO_bgHandle.IsCompleted) {
+            ISO-AddLog "A download operation is already running." "WARN"
+            return
+        }
+        ISO-CleanupBackground
+
         $dest = $Global:ISO_destBox.Text.Trim()
         if ($dest -eq "") {
             ISO-AddLog "No destination folder specified." "FAIL"
@@ -494,9 +521,10 @@ Register-PowerToolsModule `
         ISO-StartTimer
 
         $capturedJobs = @($jobs)
-        $null = [System.Threading.Tasks.Task]::Run({
-            ISO-RunDownloads -Jobs $capturedJobs -CancelToken $token
-        })
+        $capturedRunner = ${function:Global:ISO-RunDownloads}
+        $Global:ISO_bgPS = [System.Management.Automation.PowerShell]::Create()
+        $null = $Global:ISO_bgPS.AddScript($capturedRunner).AddArgument($capturedJobs).AddArgument($token)
+        $Global:ISO_bgHandle = $Global:ISO_bgPS.BeginInvoke()
     })
 
     $Global:ISO_clearLog.Add_Click({

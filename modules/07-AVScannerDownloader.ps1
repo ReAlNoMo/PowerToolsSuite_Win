@@ -142,6 +142,8 @@ Register-PowerToolsModule `
     $Global:AV_msgQueue     = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
     $Global:AV_timer        = $null
     $Global:AV_cancelFlag   = [System.Threading.CancellationTokenSource]::new()
+    $Global:AV_bgPS         = $null
+    $Global:AV_bgHandle     = $null
 
     # safer default destination
     $defaultDest = Join-Path $env:USERPROFILE "Downloads\AVScanners"
@@ -187,6 +189,22 @@ Register-PowerToolsModule `
         $Global:AV_startBtn.Content    = if ($Busy) { "Downloading..." } else { "Start Download" }
     }
 
+    function Global:AV-CleanupBackground {
+        if ($null -ne $Global:AV_bgPS) {
+            try {
+                if ($null -ne $Global:AV_bgHandle -and $Global:AV_bgHandle.IsCompleted) {
+                    $null = $Global:AV_bgPS.EndInvoke($Global:AV_bgHandle)
+                }
+            } catch {
+                # already reported elsewhere or runspace disposed
+            } finally {
+                try { $Global:AV_bgPS.Dispose() } catch {}
+                $Global:AV_bgPS = $null
+                $Global:AV_bgHandle = $null
+            }
+        }
+    }
+
     function Global:AV-StartTimer {
         if ($null -ne $Global:AV_timer) {
             try { $Global:AV_timer.Stop() } catch {}
@@ -213,18 +231,21 @@ Register-PowerToolsModule `
                         $Global:AV_statusLabel.Text       = "All downloads complete."
                         $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["Success"]
                         AV-SetUI-Busy $false
+                        AV-CleanupBackground
                     }
                     "CANCELLED" {
                         $Global:AV_timer.Stop()
                         $Global:AV_statusLabel.Text       = "Cancelled."
                         $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["Warning"]
                         AV-SetUI-Busy $false
+                        AV-CleanupBackground
                     }
                     "ERROR" {
                         $Global:AV_timer.Stop()
                         $Global:AV_statusLabel.Text       = if ($item.Status) { $item.Status } else { "Error during download." }
                         $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
                         AV-SetUI-Busy $false
+                        AV-CleanupBackground
                     }
                 }
             }
@@ -502,6 +523,121 @@ Register-PowerToolsModule `
         return $result
     }
 
+    $Global:AV_orchestratorScript = {
+        param(
+            [object[]]$Scanners,
+            [int]$Total,
+            [System.Collections.Concurrent.ConcurrentQueue[object]]$Queue,
+            [System.Threading.CancellationToken]$CancelToken,
+            [scriptblock]$WorkerScript
+        )
+
+        try {
+            $maxThreads = [math]::Min($Total, 4)
+            $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $maxThreads)
+            $pool.Open()
+
+            $jobs = [System.Collections.Generic.List[hashtable]]::new()
+            foreach ($scanner in $Scanners) {
+                if ($CancelToken.IsCancellationRequested) { break }
+                $Queue.Enqueue([PSCustomObject]@{
+                    Type = "LOG"
+                    Msg  = "Queueing job: $($scanner.Name)"
+                    Tag  = "INFO"
+                })
+                $ps = [System.Management.Automation.PowerShell]::Create()
+                $ps.RunspacePool = $pool
+                $null = $ps.AddScript($WorkerScript).AddArgument($scanner).AddArgument($Queue).AddArgument($CancelToken)
+                $jobs.Add(@{ PS = $ps; Handle = $ps.BeginInvoke(); Done = $false })
+            }
+
+            $done = 0
+            $ok = 0
+            $failed = 0
+
+            while ($done -lt $jobs.Count) {
+                Start-Sleep -Milliseconds 300
+                foreach ($j in $jobs) {
+                    if (-not $j.Done -and $j.Handle.IsCompleted) {
+                        $j["Done"] = $true
+                        $done++
+                        try {
+                            $r = $j.PS.EndInvoke($j.Handle)
+                            if ($r -and $r.Count -gt 0 -and $r[0].Success) {
+                                $ok++
+                                $Queue.Enqueue([PSCustomObject]@{
+                                    Type = "LOG"
+                                    Msg  = "Job success: $($r[0].Name)"
+                                    Tag  = "OK"
+                                })
+                            } else {
+                                $failed++
+                                $failedName = if ($r -and $r.Count -gt 0 -and $r[0].Name) { $r[0].Name } else { "Unknown" }
+                                $failedReason = if ($r -and $r.Count -gt 0 -and $r[0].Message) { $r[0].Message } else { "No reason returned" }
+                                $Queue.Enqueue([PSCustomObject]@{
+                                    Type = "LOG"
+                                    Msg  = "Job failed: $failedName ($failedReason)"
+                                    Tag  = "FAIL"
+                                })
+                            }
+                        } catch {
+                            $failed++
+                            $errMsg = $_.ToString()
+                            $Queue.Enqueue([PSCustomObject]@{
+                                Type = "LOG"
+                                Msg  = "Worker error: $errMsg"
+                                Tag  = "FAIL"
+                            })
+                        } finally {
+                            $j.PS.Dispose()
+                        }
+
+                        $pct = [int](($done / $Total) * 100)
+                        $Queue.Enqueue([PSCustomObject]@{
+                            Type   = "PROGRESS"
+                            Pct    = $pct
+                            Status = "Completed $done of $Total scanner(s)"
+                        })
+                    }
+                }
+            }
+
+            $pool.Close()
+            $pool.Dispose()
+
+            if ($CancelToken.IsCancellationRequested) {
+                $Queue.Enqueue([PSCustomObject]@{ Type = "CANCELLED" })
+            } elseif ($failed -gt 0) {
+                $Queue.Enqueue([PSCustomObject]@{
+                    Type = "LOG"
+                    Msg  = "Finished with errors. Success: $ok, Failed: $failed"
+                    Tag  = "FAIL"
+                })
+                $Queue.Enqueue([PSCustomObject]@{
+                    Type   = "ERROR"
+                    Status = "Finished with errors ($ok ok / $failed failed)."
+                })
+            } else {
+                $Queue.Enqueue([PSCustomObject]@{
+                    Type = "LOG"
+                    Msg  = "All downloads finished."
+                    Tag  = "OK"
+                })
+                $Queue.Enqueue([PSCustomObject]@{ Type = "DONE" })
+            }
+        } catch {
+            $Queue.Enqueue([PSCustomObject]@{
+                Type = "LOG"
+                Msg  = "Fatal coordinator error: $($_.ToString())"
+                Tag  = "FAIL"
+            })
+            $Queue.Enqueue([PSCustomObject]@{
+                Type   = "ERROR"
+                Status = "Fatal error during download task."
+            })
+        }
+    }
+
     # ===========================================================================
     # SCANNER JOB LIST
     # ===========================================================================
@@ -563,128 +699,73 @@ Register-PowerToolsModule `
     # START HANDLER
     # ===========================================================================
     $Global:AV_startBtn.Add_Click({
-        $dest = $Global:AV_destBox.Text.Trim()
-        if ([string]::IsNullOrWhiteSpace($dest)) {
-            AV-AddLog "No destination folder specified." "FAIL"
-            return
-        }
-        if (-not (Test-Path $dest)) {
-            try {
-                New-Item -ItemType Directory -Path $dest -Force | Out-Null
-                AV-AddLog "Created folder: $dest" "INFO"
-            } catch {
-                $errMsg = $_.ToString()
-                AV-AddLog "Cannot create folder: $dest - $errMsg" "FAIL"
+        try {
+            AV-AddLog "Start requested." "INFO"
+
+            if ($null -ne $Global:AV_bgHandle -and -not $Global:AV_bgHandle.IsCompleted) {
+                AV-AddLog "A download operation is already running." "WARN"
                 return
             }
-        }
+            AV-CleanupBackground
 
-        $scanners = AV-GetScannerList -Dest $dest
-        if ($scanners.Count -eq 0) {
-            AV-AddLog "No scanners selected." "WARN"
-            return
-        }
-
-        $Global:AV_cancelFlag = [System.Threading.CancellationTokenSource]::new()
-
-        $Global:AV_progress.Value         = 0
-        $Global:AV_pctLabel.Text          = "0%"
-        $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
-        $Global:AV_statusLabel.Text       = "Starting..."
-        AV-SetUI-Busy $true
-        AV-StartTimer
-
-        $capturedScanners = @($scanners)
-        $capturedTotal    = $scanners.Count
-        $capturedQueue    = $Global:AV_msgQueue
-        $capturedToken    = $Global:AV_cancelFlag.Token
-        $capturedScript   = $Global:AV_dlScript
-
-        $null = [System.Threading.Tasks.Task]::Run([Action]{
-            try {
-                $maxThreads = [math]::Min($capturedTotal, 4)
-                $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $maxThreads)
-                $pool.Open()
-
-                $jobs = [System.Collections.Generic.List[hashtable]]::new()
-                foreach ($scanner in $capturedScanners) {
-                    if ($capturedToken.IsCancellationRequested) { break }
-                    $ps = [System.Management.Automation.PowerShell]::Create()
-                    $ps.RunspacePool = $pool
-                    $null = $ps.AddScript($capturedScript).AddArgument($scanner).AddArgument($capturedQueue).AddArgument($capturedToken)
-                    $jobs.Add(@{ PS = $ps; Handle = $ps.BeginInvoke(); Done = $false })
-                }
-
-                $done = 0
-                $ok = 0
-                $failed = 0
-
-                while ($done -lt $jobs.Count) {
-                    Start-Sleep -Milliseconds 300
-                    foreach ($j in $jobs) {
-                        if (-not $j.Done -and $j.Handle.IsCompleted) {
-                            $j["Done"] = $true
-                            $done++
-                            try {
-                                $r = $j.PS.EndInvoke($j.Handle)
-                                if ($r -and $r.Count -gt 0 -and $r[0].Success) { $ok++ } else { $failed++ }
-                            } catch {
-                                $failed++
-                                $errMsg = $_.ToString()
-                                $capturedQueue.Enqueue([PSCustomObject]@{
-                                    Type = "LOG"
-                                    Msg  = "Worker error: $errMsg"
-                                    Tag  = "FAIL"
-                                })
-                            } finally {
-                                $j.PS.Dispose()
-                            }
-
-                            $pct = [int](($done / $capturedTotal) * 100)
-                            $capturedQueue.Enqueue([PSCustomObject]@{
-                                Type   = "PROGRESS"
-                                Pct    = $pct
-                                Status = "Completed $done of $capturedTotal scanner(s)"
-                            })
-                        }
-                    }
-                }
-
-                $pool.Close()
-                $pool.Dispose()
-
-                if ($capturedToken.IsCancellationRequested) {
-                    $capturedQueue.Enqueue([PSCustomObject]@{ Type = "CANCELLED" })
-                } elseif ($failed -gt 0) {
-                    $capturedQueue.Enqueue([PSCustomObject]@{
-                        Type = "LOG"
-                        Msg  = "Finished with errors. Success: $ok, Failed: $failed"
-                        Tag  = "FAIL"
-                    })
-                    $capturedQueue.Enqueue([PSCustomObject]@{
-                        Type   = "ERROR"
-                        Status = "Finished with errors ($ok ok / $failed failed)."
-                    })
-                } else {
-                    $capturedQueue.Enqueue([PSCustomObject]@{
-                        Type = "LOG"
-                        Msg  = "All downloads finished."
-                        Tag  = "OK"
-                    })
-                    $capturedQueue.Enqueue([PSCustomObject]@{ Type = "DONE" })
-                }
-            } catch {
-                $capturedQueue.Enqueue([PSCustomObject]@{
-                    Type = "LOG"
-                    Msg  = "Fatal worker error: $($_.ToString())"
-                    Tag  = "FAIL"
-                })
-                $capturedQueue.Enqueue([PSCustomObject]@{
-                    Type   = "ERROR"
-                    Status = "Fatal error during download task."
-                })
+            $dest = "$($Global:AV_destBox.Text)".Trim()
+            if ([string]::IsNullOrWhiteSpace($dest)) {
+                AV-AddLog "No destination folder specified." "FAIL"
+                return
             }
-        })
+            if (-not (Test-Path $dest)) {
+                try {
+                    New-Item -ItemType Directory -Path $dest -Force | Out-Null
+                    AV-AddLog "Created folder: $dest" "INFO"
+                } catch {
+                    $errMsg = $_.ToString()
+                    AV-AddLog "Cannot create folder: $dest - $errMsg" "FAIL"
+                    return
+                }
+            }
+
+            $scanners = AV-GetScannerList -Dest $dest
+            if ($scanners.Count -eq 0) {
+                AV-AddLog "No scanners selected." "WARN"
+                return
+            }
+
+            AV-AddLog "Selected scanners: $((@($scanners | ForEach-Object { $_.Name }) -join ', '))" "INFO"
+            AV-AddLog "Destination: $dest" "INFO"
+
+            $Global:AV_cancelFlag = [System.Threading.CancellationTokenSource]::new()
+
+            # clear stale queue messages from previous run
+            $item = $null
+            while ($Global:AV_msgQueue.TryDequeue([ref]$item)) {}
+
+            $Global:AV_progress.Value         = 0
+            $Global:AV_pctLabel.Text          = "0%"
+            $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
+            $Global:AV_statusLabel.Text       = "Starting..."
+            AV-SetUI-Busy $true
+            AV-StartTimer
+
+            $capturedScanners = @($scanners)
+            $capturedTotal    = $scanners.Count
+            $capturedQueue    = $Global:AV_msgQueue
+            $capturedToken    = $Global:AV_cancelFlag.Token
+            $capturedScript   = $Global:AV_dlScript
+            $capturedOrch     = $Global:AV_orchestratorScript
+
+            $Global:AV_bgPS = [System.Management.Automation.PowerShell]::Create()
+            $null = $Global:AV_bgPS.AddScript($capturedOrch).AddArgument($capturedScanners).AddArgument($capturedTotal).AddArgument($capturedQueue).AddArgument($capturedToken).AddArgument($capturedScript)
+            $Global:AV_bgHandle = $Global:AV_bgPS.BeginInvoke()
+
+            AV-AddLog "Download coordinator started (parallel max: $([Math]::Min($capturedTotal,4)))." "INFO"
+        } catch {
+            $errMsg = $_.ToString()
+            AV-AddLog "Failed to start download operation: $errMsg" "FAIL"
+            $Global:AV_statusLabel.Text       = "Error during startup."
+            $Global:AV_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
+            AV-SetUI-Busy $false
+            AV-CleanupBackground
+        }
     })
 
     # ===========================================================================
