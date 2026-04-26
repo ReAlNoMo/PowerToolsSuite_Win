@@ -31,8 +31,8 @@ Register-PowerToolsModule `
                 <ColumnDefinition Width="120"/>
             </Grid.ColumnDefinitions>
             <TextBox Grid.Column="0" x:Name="DestBox" Text="C:\AVScanners" Height="40"
-                     FontSize="13" Padding="12,10" Background="#FFFFFF" Foreground="#111827"
-                     BorderBrush="#D0D6F0" BorderThickness="1.5"
+                     FontSize="13" Padding="12,10"
+                     BorderThickness="1.5"
                      FontFamily="Cascadia Code, Consolas"
                      VerticalContentAlignment="Center" Margin="0,0,8,0"/>
             <Button Grid.Column="1" x:Name="BrowseBtn" Content="Browse..."
@@ -94,7 +94,7 @@ Register-PowerToolsModule `
     </Grid>
 
     <!-- LOG -->
-    <Border Grid.Row="5" Background="#FAFBFF" BorderBrush="#D8DEFA"
+    <Border Grid.Row="5" x:Name="LogBorder"
             BorderThickness="1.5" CornerRadius="8">
         <Grid>
             <Grid.RowDefinitions>
@@ -105,7 +105,6 @@ Register-PowerToolsModule `
                        FontWeight="Bold" Margin="12,8,0,4"/>
             <ScrollViewer Grid.Row="1" x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
                 <TextBlock x:Name="LogBox"
-                           Foreground="#4A5280"
                            FontFamily="Cascadia Code, Consolas, Courier New"
                            FontSize="11" Padding="12,0,12,10" TextWrapping="Wrap"
                            LineHeight="18" Text="Ready."/>
@@ -137,10 +136,19 @@ Register-PowerToolsModule `
     $Global:AV_clearLogBtn  = $view.FindName("ClearLogBtn")
     $Global:AV_logBox       = $view.FindName("LogBox")
     $Global:AV_logScroller  = $view.FindName("LogScroller")
+    $Global:AV_logBorder    = $view.FindName("LogBorder")
     $Global:AV_initText     = "Ready."
     $Global:AV_msgQueue     = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
     $Global:AV_timer        = $null
     $Global:AV_cancelFlag   = [System.Threading.CancellationTokenSource]::new()
+
+    # Apply theme-aware colors
+    $Global:AV_destBox.Background   = $Global:PTS_Brush["InputBg"]
+    $Global:AV_destBox.Foreground   = $Global:PTS_Brush["InputFg"]
+    $Global:AV_destBox.BorderBrush  = $Global:PTS_Brush["Border"]
+    $Global:AV_logBox.Foreground    = $Global:PTS_Brush["TextMuted"]
+    $Global:AV_logBorder.Background  = $Global:PTS_Brush["LogBg"]
+    $Global:AV_logBorder.BorderBrush = $Global:PTS_Brush["LogBorder"]
 
     # ===========================================================================
     # HELPERS
@@ -402,7 +410,7 @@ Register-PowerToolsModule `
         $total    = $scanners.Count
         $captured = @($scanners)
 
-        $null = [System.Threading.Tasks.Task]::Run({
+        $null = [System.Threading.Tasks.Task]::Run([Action]{
             $allOk = $true
             for ($i = 0; $i -lt $captured.Count; $i++) {
                 if ($token.IsCancellationRequested) {
