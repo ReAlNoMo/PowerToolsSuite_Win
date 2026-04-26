@@ -102,12 +102,18 @@ Register-PowerToolsModule `
             </Grid.RowDefinitions>
             <TextBlock Grid.Row="0" Text="ACTIVITY LOG" Foreground="#8890B8" FontSize="9"
                        FontWeight="Bold" Margin="12,8,0,4"/>
-            <ScrollViewer Grid.Row="1" x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
-                <TextBlock x:Name="LogBox"
-                           FontFamily="Cascadia Code, Consolas, Courier New"
-                           FontSize="11" Padding="12,0,12,10" TextWrapping="Wrap"
-                           LineHeight="18" Text="Ready."/>
-            </ScrollViewer>
+            <TextBox Grid.Row="1" x:Name="LogBox"
+                     IsReadOnly="True"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     VerticalScrollBarVisibility="Auto"
+                     HorizontalScrollBarVisibility="Disabled"
+                     BorderThickness="0"
+                     Background="Transparent"
+                     FontFamily="Cascadia Code, Consolas, Courier New"
+                     FontSize="11"
+                     Padding="12,0,12,10"
+                     Text="Ready."/>
         </Grid>
     </Border>
 </Grid>
@@ -134,7 +140,6 @@ Register-PowerToolsModule `
     $Global:AV_pctLabel     = $view.FindName("PctLabel")
     $Global:AV_clearLogBtn  = $view.FindName("ClearLogBtn")
     $Global:AV_logBox       = $view.FindName("LogBox")
-    $Global:AV_logScroller  = $view.FindName("LogScroller")
     $Global:AV_logBorder    = $view.FindName("LogBorder")
     $Global:AV_infoBar      = $view.FindName("InfoBar")
     $Global:AV_infoBarText  = $view.FindName("InfoBarText")
@@ -179,8 +184,14 @@ Register-PowerToolsModule `
         $entry = "[$ts]  $tag  $Msg`n"
         if ($Global:AV_logBox.Text -eq $Global:AV_initText) { $Global:AV_logBox.Text = $entry }
         else { $Global:AV_logBox.Text += $entry }
-        $Global:AV_logScroller.ScrollToEnd()
+        $Global:AV_logBox.ScrollToEnd()
     }
+
+    $Global:AV_logBox.Add_PreviewMouseWheel({
+        param($sender, $e)
+        if ($e.Delta -gt 0) { $sender.LineUp() } else { $sender.LineDown() }
+        $e.Handled = $true
+    })
 
     function Global:AV-SetUI-Busy {
         param([bool]$Busy)

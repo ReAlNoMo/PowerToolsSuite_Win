@@ -106,12 +106,18 @@ Register-PowerToolsModule `
 
     <Border Grid.Row="6" x:Name="LogBorder"
             BorderThickness="1.5" CornerRadius="10">
-        <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
-            <TextBlock x:Name="LogBox"
-                       FontFamily="Cascadia Code, Consolas, Courier New"
-                       FontSize="12" Padding="16,12" TextWrapping="Wrap"
-                       LineHeight="20" Text="Ready."/>
-        </ScrollViewer>
+        <TextBox x:Name="LogBox"
+                 IsReadOnly="True"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 VerticalScrollBarVisibility="Auto"
+                 HorizontalScrollBarVisibility="Disabled"
+                 BorderThickness="0"
+                 Background="Transparent"
+                 FontFamily="Cascadia Code, Consolas, Courier New"
+                 FontSize="12"
+                 Padding="16,12"
+                 Text="Ready."/>
     </Border>
 </Grid>
 "@
@@ -140,7 +146,6 @@ Register-PowerToolsModule `
     $Global:ISO_pctLabel    = $view.FindName("PctLabel")
     $Global:ISO_clearLog    = $view.FindName("ClearLogBtn")
     $Global:ISO_logBox      = $view.FindName("LogBox")
-    $Global:ISO_logScroller = $view.FindName("LogScroller")
     $Global:ISO_logBorder   = $view.FindName("LogBorder")
     $Global:ISO_initText    = "Ready."
     $Global:ISO_msgQueue    = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
@@ -167,8 +172,14 @@ Register-PowerToolsModule `
         $entry = "[$ts]  $tag  $Msg`n"
         if ($Global:ISO_logBox.Text -eq $Global:ISO_initText) { $Global:ISO_logBox.Text = $entry }
         else { $Global:ISO_logBox.Text += $entry }
-        $Global:ISO_logScroller.ScrollToEnd()
+        $Global:ISO_logBox.ScrollToEnd()
     }
+
+    $Global:ISO_logBox.Add_PreviewMouseWheel({
+        param($sender, $e)
+        if ($e.Delta -gt 0) { $sender.LineUp() } else { $sender.LineDown() }
+        $e.Handled = $true
+    })
 
     function Global:ISO-SetUI-Busy {
         param([bool]$Busy)
