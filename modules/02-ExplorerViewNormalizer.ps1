@@ -19,22 +19,22 @@ Register-PowerToolsModule `
         <RowDefinition Height="*"/>
     </Grid.RowDefinitions>
 
-    <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#D0D6F0"
+    <Border Grid.Row="0" x:Name="InfoBorder"
             BorderThickness="1.5" CornerRadius="10" Padding="18,16" Margin="0,0,0,14">
         <StackPanel>
             <TextBlock Text="WHAT THIS DOES" Foreground="#8890B8" FontSize="10"
                        FontWeight="Bold" Margin="0,0,0,8"/>
-            <TextBlock Foreground="#4A5280" FontSize="13" TextWrapping="Wrap" LineHeight="20"
+            <TextBlock x:Name="InfoText" FontSize="13" TextWrapping="Wrap" LineHeight="20"
                 Text="Clears Explorer Shell Bags and applies default folder settings: no grouping, Details view, sort by Name. Applies to all folder types (Generic, Downloads, Documents, Pictures, Music, Videos)."/>
         </StackPanel>
     </Border>
 
-    <Border Grid.Row="1" Background="#FAFBFF" BorderBrush="#D8DEFA"
+    <Border Grid.Row="1" x:Name="StatusBorder"
             BorderThickness="1.5" CornerRadius="10" Padding="18,16" Margin="0,0,0,14">
         <StackPanel>
             <TextBlock Text="STATUS" Foreground="#8890B8" FontSize="10"
                        FontWeight="Bold" Margin="0,0,0,8"/>
-            <TextBlock x:Name="StatusText" Foreground="#4A5280" FontSize="13"
+            <TextBlock x:Name="StatusText" FontSize="13"
                        TextWrapping="Wrap" Text="Checking current configuration..."/>
         </StackPanel>
     </Border>
@@ -61,10 +61,10 @@ Register-PowerToolsModule `
                 Style="{DynamicResource SecondaryButton}" Padding="12,6" FontSize="11"/>
     </Grid>
 
-    <Border Grid.Row="4" Background="#FAFBFF" BorderBrush="#D8DEFA"
+    <Border Grid.Row="4" x:Name="LogBorder"
             BorderThickness="1.5" CornerRadius="10">
         <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
-            <TextBlock x:Name="LogBox" Foreground="#8890B8"
+            <TextBlock x:Name="LogBox"
                        FontFamily="Cascadia Code, Consolas, Courier New"
                        FontSize="12" Padding="16,14" TextWrapping="Wrap"
                        LineHeight="20" Text="Ready."/>
@@ -81,14 +81,28 @@ Register-PowerToolsModule `
         $view.Resources.Add($k, $win.FindResource($k))
     }
 
-    # Store all controls in script-scope so event handlers can reach them
-    $script:EVN_apply       = $view.FindName("ApplyBtn")
-    $script:EVN_recheck     = $view.FindName("RecheckBtn")
-    $script:EVN_clearLog    = $view.FindName("ClearLogBtn")
-    $script:EVN_statusText  = $view.FindName("StatusText")
-    $script:EVN_logBox      = $view.FindName("LogBox")
-    $script:EVN_logScroller = $view.FindName("LogScroller")
-    $script:EVN_initText    = "Ready."
+    $script:EVN_apply        = $view.FindName("ApplyBtn")
+    $script:EVN_recheck      = $view.FindName("RecheckBtn")
+    $script:EVN_clearLog     = $view.FindName("ClearLogBtn")
+    $script:EVN_statusText   = $view.FindName("StatusText")
+    $script:EVN_logBox       = $view.FindName("LogBox")
+    $script:EVN_logScroller  = $view.FindName("LogScroller")
+    $script:EVN_infoBorder   = $view.FindName("InfoBorder")
+    $script:EVN_infoText     = $view.FindName("InfoText")
+    $script:EVN_statusBorder = $view.FindName("StatusBorder")
+    $script:EVN_logBorder    = $view.FindName("LogBorder")
+    $script:EVN_initText     = "Ready."
+
+    # Apply theme-aware colors
+    $script:EVN_infoBorder.Background    = $Global:PTS_Brush["Surface"]
+    $script:EVN_infoBorder.BorderBrush   = $Global:PTS_Brush["Border"]
+    $script:EVN_infoText.Foreground      = $Global:PTS_Brush["TextMid"]
+    $script:EVN_statusBorder.Background  = $Global:PTS_Brush["LogBg"]
+    $script:EVN_statusBorder.BorderBrush = $Global:PTS_Brush["LogBorder"]
+    $script:EVN_statusText.Foreground    = $Global:PTS_Brush["TextMid"]
+    $script:EVN_logBorder.Background     = $Global:PTS_Brush["LogBg"]
+    $script:EVN_logBorder.BorderBrush    = $Global:PTS_Brush["LogBorder"]
+    $script:EVN_logBox.Foreground        = $Global:PTS_Brush["TextMuted"]
 
     $script:EVN_folderTypes = [ordered]@{
         "Generic"   = "{00000000-0000-0000-0000-000000000000}"
@@ -123,15 +137,15 @@ Register-PowerToolsModule `
             }
         }
         if ($allOk) {
-            $script:EVN_statusText.Text = "Explorer is already configured (no grouping, Details view). No action needed."
-            $script:EVN_statusText.Foreground = Get-PowerToolsBrush "Success"
-            $script:EVN_apply.IsEnabled = $false
-            $script:EVN_apply.Content   = "Already Applied"
+            $script:EVN_statusText.Text       = "Explorer is already configured (no grouping, Details view). No action needed."
+            $script:EVN_statusText.Foreground = $Global:PTS_Brush["Success"]
+            $script:EVN_apply.IsEnabled       = $false
+            $script:EVN_apply.Content         = "Already Applied"
         } else {
-            $script:EVN_statusText.Text = "Explorer is not fully configured. Click Apply to normalize settings."
-            $script:EVN_statusText.Foreground = Get-PowerToolsBrush "Warning"
-            $script:EVN_apply.IsEnabled = $true
-            $script:EVN_apply.Content   = "Apply Settings"
+            $script:EVN_statusText.Text       = "Explorer is not fully configured. Click Apply to normalize settings."
+            $script:EVN_statusText.Foreground = $Global:PTS_Brush["Warning"]
+            $script:EVN_apply.IsEnabled       = $true
+            $script:EVN_apply.Content         = "Apply Settings"
         }
     }
 
