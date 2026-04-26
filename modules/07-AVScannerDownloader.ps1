@@ -318,7 +318,9 @@ Register-PowerToolsModule `
             } catch {
                 if ($null -ne $fs) { try { $fs.Close() } catch {} }
                 if (Test-Path $tmpFile) { Remove-Item $tmpFile -Force -EA SilentlyContinue }
-                Q-Log "$name: URL failed ($tryUrl) - $_" "WARN"
+                # FIX 1: $_ und $name: sicher in Strings einbetten
+                $errMsg = $_.ToString()
+                Q-Log "${name}: URL failed ($tryUrl) - $errMsg" "WARN"
             }
         }
 
@@ -371,8 +373,6 @@ Register-PowerToolsModule `
 
     # ===========================================================================
     # START HANDLER
-    # Key fix: RunspacePool + monitor loop ALL inside single Task::Run closure.
-    # Handles (IAsyncResult) never cross runspace boundaries - no serialization.
     # ===========================================================================
     $Global:AV_startBtn.Add_Click({
         $dest = $Global:AV_destBox.Text.Trim()
@@ -384,7 +384,8 @@ Register-PowerToolsModule `
                 New-Item -ItemType Directory -Path $dest -Force | Out-Null
                 AV-AddLog "Created folder: $dest" "INFO"
             } catch {
-                AV-AddLog "Cannot create folder: $dest - $_" "FAIL"; return
+                $errMsg = $_.ToString()
+                AV-AddLog "Cannot create folder: $dest - $errMsg" "FAIL"; return
             }
         }
 
@@ -402,7 +403,6 @@ Register-PowerToolsModule `
         AV-SetUI-Busy $true
         AV-StartTimer
 
-        # Capture all needed values - they live in the closure scope
         $capturedScanners = @($scanners)
         $capturedTotal    = $scanners.Count
         $capturedQueue    = $Global:AV_msgQueue
@@ -410,8 +410,6 @@ Register-PowerToolsModule `
         $capturedScript   = $Global:AV_dlScript
 
         $null = [System.Threading.Tasks.Task]::Run([Action]{
-            # Pool + all PS instances + IAsyncResult handles live HERE in this closure.
-            # Nothing crosses a runspace boundary except the dlScript block + plain data.
             $maxThreads = [math]::Min($capturedTotal, 4)
             $pool = [System.Management.Automation.Runspaces.RunspaceFactory]::CreateRunspacePool(1, $maxThreads)
             $pool.Open()
@@ -421,14 +419,11 @@ Register-PowerToolsModule `
                 if ($capturedToken.IsCancellationRequested) { break }
                 $ps = [System.Management.Automation.PowerShell]::Create()
                 $ps.RunspacePool = $pool
-                $ps.AddScript($capturedScript) `
-                   .AddArgument($scanner) `
-                   .AddArgument($capturedQueue) `
-                   .AddArgument($capturedToken) | Out-Null
+                # FIX 2: Method-Chaining ohne Backtick-Continuation
+                $null = $ps.AddScript($capturedScript).AddArgument($scanner).AddArgument($capturedQueue).AddArgument($capturedToken)
                 $jobs.Add(@{ PS=$ps; Handle=$ps.BeginInvoke(); Done=$false })
             }
 
-            # Monitor: handles are local variables here - no serialization needed
             $done = 0
             while ($done -lt $jobs.Count) {
                 Start-Sleep -Milliseconds 300
@@ -437,8 +432,9 @@ Register-PowerToolsModule `
                         $j["Done"] = $true
                         $done++
                         try { $j.PS.EndInvoke($j.Handle) } catch {
+                            $errMsg = $_.ToString()
                             $capturedQueue.Enqueue([PSCustomObject]@{
-                                Type="LOG"; Msg="Worker error: $_"; Tag="FAIL"
+                                Type="LOG"; Msg="Worker error: $errMsg"; Tag="FAIL"
                             })
                         }
                         $j.PS.Dispose()
