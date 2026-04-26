@@ -11,8 +11,12 @@
       "url": "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/install.ps1"
     },
     {
-      "title": "Hash Module",
-      "url": "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/modules/01-HashVerifier.ps1"
+      "title": "Module",
+      "url": "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/modules/"
+    }
+    {
+      "title": "Logo",
+      "url": "https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/logo/"
     }
   ]
 }
