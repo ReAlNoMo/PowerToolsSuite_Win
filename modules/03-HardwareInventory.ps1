@@ -22,12 +22,12 @@ Register-PowerToolsModule `
         <RowDefinition Height="*"/>
     </Grid.RowDefinitions>
 
-    <Border Grid.Row="0" Background="#FFFFFF" BorderBrush="#D0D6F0"
+    <Border Grid.Row="0" x:Name="InfoBorder"
             BorderThickness="1.5" CornerRadius="10" Padding="18,16" Margin="0,0,0,14">
         <StackPanel>
             <TextBlock Text="WHAT THIS DOES" Foreground="#8890B8" FontSize="10"
                        FontWeight="Bold" Margin="0,0,0,8"/>
-            <TextBlock Foreground="#4A5280" FontSize="13" TextWrapping="Wrap" LineHeight="20"
+            <TextBlock x:Name="InfoText" FontSize="13" TextWrapping="Wrap" LineHeight="20"
                 Text="Collects hardware information via WMI/CIM and writes a styled HTML report to your Desktop."/>
         </StackPanel>
     </Border>
@@ -35,10 +35,8 @@ Register-PowerToolsModule `
     <StackPanel Grid.Row="1" Margin="0,0,0,14">
         <TextBlock Text="OUTPUT PATH" Foreground="#8890B8" FontSize="10"
                    FontWeight="Bold" Margin="0,0,0,6"/>
-        <Border Background="#FAFBFF" BorderBrush="#D8DEFA" BorderThickness="1.5"
-                CornerRadius="8" Padding="12,10">
-            <TextBlock x:Name="OutputPath" Foreground="#4A5280" FontSize="12"
-                       FontFamily="Cascadia Code, Consolas"/>
+        <Border x:Name="OutputPathBorder" BorderThickness="1.5" CornerRadius="8" Padding="12,10">
+            <TextBlock x:Name="OutputPath" FontSize="12" FontFamily="Cascadia Code, Consolas"/>
         </Border>
     </StackPanel>
 
@@ -53,18 +51,15 @@ Register-PowerToolsModule `
                 Style="{DynamicResource SecondaryButton}" Height="46" FontSize="13" IsEnabled="False"/>
     </Grid>
 
-    <!-- Progress section -->
     <Grid Grid.Row="3" Margin="0,0,0,6">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="*"/>
             <ColumnDefinition Width="Auto"/>
         </Grid.ColumnDefinitions>
         <TextBlock x:Name="StatusLabel" Grid.Column="0"
-                   Text="Idle" Foreground="#8890B8" FontSize="11"
-                   VerticalAlignment="Center"/>
+                   Text="Idle" FontSize="11" VerticalAlignment="Center"/>
         <TextBlock x:Name="PctLabel" Grid.Column="1"
-                   Text="" Foreground="#3B5BDB" FontSize="11" FontWeight="Bold"
-                   VerticalAlignment="Center"/>
+                   Text="" FontSize="11" FontWeight="Bold" VerticalAlignment="Center"/>
     </Grid>
     <ProgressBar Grid.Row="4" x:Name="ProgressBar" Height="6"
                  Minimum="0" Maximum="100" Value="0" Margin="0,0,0,14"/>
@@ -86,10 +81,10 @@ Register-PowerToolsModule `
                     Style="{DynamicResource SecondaryButton}" Padding="12,6" FontSize="11"/>
         </Grid>
 
-        <Border Grid.Row="1" Background="#FAFBFF" BorderBrush="#D8DEFA"
+        <Border Grid.Row="1" x:Name="LogBorder"
                 BorderThickness="1.5" CornerRadius="10" MinHeight="160">
             <ScrollViewer x:Name="LogScroller" VerticalScrollBarVisibility="Auto">
-                <TextBlock x:Name="LogBox" Foreground="#8890B8"
+                <TextBlock x:Name="LogBox"
                            FontFamily="Cascadia Code, Consolas, Courier New"
                            FontSize="12" Padding="16,14" TextWrapping="Wrap"
                            LineHeight="20" Text="Ready. Click Generate Report to begin."/>
@@ -107,21 +102,38 @@ Register-PowerToolsModule `
         $view.Resources.Add($k, $win.FindResource($k))
     }
 
-    $Global:HW_generate     = $view.FindName("GenerateBtn")
-    $Global:HW_openLast     = $view.FindName("OpenLastBtn")
-    $Global:HW_clearLog     = $view.FindName("ClearLogBtn")
-    $Global:HW_outputLbl    = $view.FindName("OutputPath")
-    $Global:HW_logBox       = $view.FindName("LogBox")
-    $Global:HW_logScroller  = $view.FindName("LogScroller")
-    $Global:HW_progress     = $view.FindName("ProgressBar")
-    $Global:HW_statusLabel  = $view.FindName("StatusLabel")
-    $Global:HW_pctLabel     = $view.FindName("PctLabel")
-    $Global:HW_initText     = "Ready. Click Generate Report to begin."
-    $Global:HW_lastReport   = ""
-    $Global:HW_msgQueue     = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
-    $Global:HW_timer        = $null
+    $Global:HW_generate         = $view.FindName("GenerateBtn")
+    $Global:HW_openLast         = $view.FindName("OpenLastBtn")
+    $Global:HW_clearLog         = $view.FindName("ClearLogBtn")
+    $Global:HW_outputLbl        = $view.FindName("OutputPath")
+    $Global:HW_outputPathBorder = $view.FindName("OutputPathBorder")
+    $Global:HW_infoBorder       = $view.FindName("InfoBorder")
+    $Global:HW_infoText         = $view.FindName("InfoText")
+    $Global:HW_logBox           = $view.FindName("LogBox")
+    $Global:HW_logScroller      = $view.FindName("LogScroller")
+    $Global:HW_logBorder        = $view.FindName("LogBorder")
+    $Global:HW_progress         = $view.FindName("ProgressBar")
+    $Global:HW_statusLabel      = $view.FindName("StatusLabel")
+    $Global:HW_pctLabel         = $view.FindName("PctLabel")
+    $Global:HW_initText         = "Ready. Click Generate Report to begin."
+    $Global:HW_lastReport       = ""
+    $Global:HW_msgQueue         = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+    $Global:HW_timer            = $null
 
     $Global:HW_outputLbl.Text = Join-Path $env:USERPROFILE "Desktop\Hardware_Report_<timestamp>.html"
+
+    # Apply theme-aware colors
+    $Global:HW_infoBorder.Background       = $Global:PTS_Brush["Surface"]
+    $Global:HW_infoBorder.BorderBrush      = $Global:PTS_Brush["Border"]
+    $Global:HW_infoText.Foreground         = $Global:PTS_Brush["TextMid"]
+    $Global:HW_outputPathBorder.Background = $Global:PTS_Brush["LogBg"]
+    $Global:HW_outputPathBorder.BorderBrush= $Global:PTS_Brush["LogBorder"]
+    $Global:HW_outputLbl.Foreground        = $Global:PTS_Brush["TextMid"]
+    $Global:HW_logBorder.Background        = $Global:PTS_Brush["LogBg"]
+    $Global:HW_logBorder.BorderBrush       = $Global:PTS_Brush["LogBorder"]
+    $Global:HW_logBox.Foreground           = $Global:PTS_Brush["TextMuted"]
+    $Global:HW_statusLabel.Foreground      = $Global:PTS_Brush["TextMuted"]
+    $Global:HW_pctLabel.Foreground         = $Global:PTS_Brush["Primary"]
 
     function Global:HW-AddLog {
         param([string]$Msg, [string]$Type = "INFO")
@@ -140,33 +152,31 @@ Register-PowerToolsModule `
             $item = $null
             while ($Global:HW_msgQueue.TryDequeue([ref]$item)) {
                 switch ($item.Type) {
-                    "LOG" {
-                        HW-AddLog -Msg $item.Msg -Type $item.Tag
-                    }
+                    "LOG"      { HW-AddLog -Msg $item.Msg -Type $item.Tag }
                     "PROGRESS" {
                         $Global:HW_progress.Value   = $item.Pct
                         $Global:HW_statusLabel.Text = $item.Status
                         $Global:HW_pctLabel.Text    = "$($item.Pct)%"
                     }
-                    "DONE" {
+                    "DONE"     {
                         $Global:HW_timer.Stop()
-                        $Global:HW_progress.Value        = 100
-                        $Global:HW_pctLabel.Text         = "100%"
-                        $Global:HW_statusLabel.Text      = "Report generated"
+                        $Global:HW_progress.Value         = 100
+                        $Global:HW_pctLabel.Text          = "100%"
+                        $Global:HW_statusLabel.Text       = "Report generated"
                         $Global:HW_statusLabel.Foreground = $Global:PTS_Brush["Success"]
-                        $Global:HW_generate.IsEnabled    = $true
-                        $Global:HW_generate.Content      = "Generate Report"
-                        $Global:HW_lastReport            = $item.ReportPath
-                        $Global:HW_outputLbl.Text        = $item.ReportPath
-                        $Global:HW_openLast.IsEnabled    = $true
+                        $Global:HW_generate.IsEnabled     = $true
+                        $Global:HW_generate.Content       = "Generate Report"
+                        $Global:HW_lastReport             = $item.ReportPath
+                        $Global:HW_outputLbl.Text         = $item.ReportPath
+                        $Global:HW_openLast.IsEnabled     = $true
                         if ($item.ReportPath -ne "") { Start-Process $item.ReportPath }
                     }
-                    "ERROR" {
+                    "ERROR"    {
                         $Global:HW_timer.Stop()
-                        $Global:HW_statusLabel.Text      = "Error"
+                        $Global:HW_statusLabel.Text       = "Error"
                         $Global:HW_statusLabel.Foreground = $Global:PTS_Brush["Danger"]
-                        $Global:HW_generate.IsEnabled    = $true
-                        $Global:HW_generate.Content      = "Generate Report"
+                        $Global:HW_generate.IsEnabled     = $true
+                        $Global:HW_generate.Content       = "Generate Report"
                     }
                 }
             }
@@ -174,12 +184,11 @@ Register-PowerToolsModule `
         $Global:HW_timer.Start()
     }
 
-    # Background report generation script
     $Global:HW_reportScript = {
         param($ReportPath, $Queue)
 
-        function Q-Log   { param($M,$T="INFO") $Queue.Enqueue([PSCustomObject]@{Type="LOG";Msg=$M;Tag=$T}) }
-        function Q-Prog  { param($P,$S)        $Queue.Enqueue([PSCustomObject]@{Type="PROGRESS";Pct=$P;Status=$S}) }
+        function Q-Log  { param($M,$T="INFO") $Queue.Enqueue([PSCustomObject]@{Type="LOG";Msg=$M;Tag=$T}) }
+        function Q-Prog { param($P,$S)        $Queue.Enqueue([PSCustomObject]@{Type="PROGRESS";Pct=$P;Status=$S}) }
 
         function ConvertSize {
             param([long]$Bytes)
@@ -376,13 +385,13 @@ Register-PowerToolsModule `
     }
 
     $Global:HW_generate.Add_Click({
-        $Global:HW_generate.IsEnabled        = $false
-        $Global:HW_generate.Content          = "Generating..."
-        $Global:HW_progress.Value            = 0
-        $Global:HW_pctLabel.Text             = "0%"
-        $Global:HW_statusLabel.Text          = "Starting..."
-        $Global:HW_statusLabel.Foreground    = $Global:PTS_Brush["TextMuted"]
-        $Global:HW_msgQueue                  = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
+        $Global:HW_generate.IsEnabled     = $false
+        $Global:HW_generate.Content       = "Generating..."
+        $Global:HW_progress.Value         = 0
+        $Global:HW_pctLabel.Text          = "0%"
+        $Global:HW_statusLabel.Text       = "Starting..."
+        $Global:HW_statusLabel.Foreground = $Global:PTS_Brush["TextMuted"]
+        $Global:HW_msgQueue               = [System.Collections.Concurrent.ConcurrentQueue[object]]::new()
 
         $rp = Join-Path $env:USERPROFILE ("Desktop\Hardware_Report_{0}.html" -f (Get-Date -Format 'yyyy-MM-dd_HH-mm'))
         $Global:HW_outputLbl.Text = $rp
