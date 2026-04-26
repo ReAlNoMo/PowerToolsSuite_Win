@@ -1,4 +1,3 @@
-```powershell
 # Module: AV Scanner Downloader
 # Downloads latest on-demand antivirus scanners from official vendor sources.
 # Live progress: per-file MB/s speed + ETA + overall progress bar via ConcurrentQueue + DispatcherTimer.
@@ -254,9 +253,9 @@ Register-PowerToolsModule `
     }
 
     # ===========================================================================
-    # DOWNLOAD WORKER SCRIPT (ausgeführt im RunspacePool)
+    # DOWNLOAD WORKER SCRIPTBLOCK (als echte Codeblöcke, kein Here-String)
     # ===========================================================================
-    $Global:AV_dlScript = @'
+    $Global:AV_dlScript = {
         param(
             [hashtable]$Job,
             [System.Collections.Concurrent.ConcurrentQueue[object]]$Queue,
@@ -359,7 +358,7 @@ Register-PowerToolsModule `
         Q-Log "FAILED: $name - all URLs exhausted." "FAIL"
         $result.Message = "All URLs failed"
         return $result
-'@
+    }
 
     # ===========================================================================
     # SCANNER JOB LIST (mit verbesserten Fallback-URLs)
@@ -376,12 +375,10 @@ Register-PowerToolsModule `
             }
         }
         if ($Global:AV_cbKVRT.IsChecked) {
-            # KEIN Fallback auf HTML-Seite – besser nur einen soliden direkten Link
             $list += @{
                 Name     = "Kaspersky KVRT"
                 FileName = "KVRT.exe"
                 Url      = "https://devapps.kaspersky.com/mcc/static/kvrt/en-US/vital-product/KVRT.exe"
-                # Fallback entfernt, da die alte "FallbackUrl" keine EXE war.
                 OutFile  = Join-Path $Dest "KVRT.exe"
             }
         }
@@ -461,7 +458,7 @@ Register-PowerToolsModule `
                     if ($capturedToken.IsCancellationRequested) { break }
                     $ps = [System.Management.Automation.PowerShell]::Create()
                     $ps.RunspacePool = $pool
-                    # Wichtig: Skript als String übergeben (nicht Block)
+                    # Wichtig: Skriptblock in String konvertieren mit .ToString()
                     $null = $ps.AddScript($capturedScript.ToString()).AddArgument($scanner).AddArgument($capturedQueue).AddArgument($capturedToken)
                     $jobs.Add(@{ PS=$ps; Handle=$ps.BeginInvoke(); Done=$false })
                 }
@@ -540,4 +537,3 @@ Register-PowerToolsModule `
 
     return $view
 }
-```
