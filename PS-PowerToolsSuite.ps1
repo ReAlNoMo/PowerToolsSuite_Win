@@ -75,7 +75,7 @@ $Global:PTS_Theme = @{
     Primary              = "#3B5BDB"
     PrimaryDark          = "#2F4AC2"
     PrimaryHover         = "#2540A8"
-    SidebarBg            = "#1A2254"
+    SidebarBg            = "#101D51"
     SidebarDivider       = "#232D6B"
     SidebarHover         = "#2A3470"
     SidebarActive        = "#3B5BDB"
@@ -196,12 +196,9 @@ function Global:Apply-PTSTheme {
         $Global:PTS_UI.SidebarDivBot.Background   = $Global:PTS_Brush["SidebarDivider"]
         $Global:PTS_UI.DarkModeLabel.Foreground   = $Global:PTS_Brush["SidebarText"]
 
-        # Update WPF resource styles for buttons/tiles/inputs
         Update-PTSStyles
-
         Build-PTSSidebar
 
-        # Re-navigate to current view
         if ($Global:PTS_ActiveSidebarBtn -ne $null) {
             Show-PTSCategoryView -DisplayName ($Global:PTS_ActiveSidebarBtn.Tag.DisplayName)
         }
@@ -209,25 +206,21 @@ function Global:Apply-PTSTheme {
 }
 
 function Global:Update-PTSStyles {
-    # PrimaryButton
     $pbStyle = $Global:PTS_Window.FindResource("PrimaryButton")
-    if ($pbStyle) {
-        $pbStyle.IsSealed | Out-Null  # check accessible
-    }
-    # Update dynamic resource values
-    $Global:PTS_Window.Resources["DynPrimary"]       = $Global:PTS_Brush["Primary"]
-    $Global:PTS_Window.Resources["DynPrimaryHover"]  = $Global:PTS_Brush["PrimaryHover"]
-    $Global:PTS_Window.Resources["DynBtnSecBg"]      = $Global:PTS_Brush["BtnSecBg"]
-    $Global:PTS_Window.Resources["DynBtnSecFg"]      = $Global:PTS_Brush["BtnSecFg"]
-    $Global:PTS_Window.Resources["DynBtnSecBorder"]  = $Global:PTS_Brush["BtnSecBorder"]
-    $Global:PTS_Window.Resources["DynBtnSecHover"]   = $Global:PTS_Brush["BtnSecHover"]
+    if ($pbStyle) { $pbStyle.IsSealed | Out-Null }
+    $Global:PTS_Window.Resources["DynPrimary"]           = $Global:PTS_Brush["Primary"]
+    $Global:PTS_Window.Resources["DynPrimaryHover"]      = $Global:PTS_Brush["PrimaryHover"]
+    $Global:PTS_Window.Resources["DynBtnSecBg"]          = $Global:PTS_Brush["BtnSecBg"]
+    $Global:PTS_Window.Resources["DynBtnSecFg"]          = $Global:PTS_Brush["BtnSecFg"]
+    $Global:PTS_Window.Resources["DynBtnSecBorder"]      = $Global:PTS_Brush["BtnSecBorder"]
+    $Global:PTS_Window.Resources["DynBtnSecHover"]       = $Global:PTS_Brush["BtnSecHover"]
     $Global:PTS_Window.Resources["DynBtnSecHoverBorder"] = $Global:PTS_Brush["BtnSecHoverBorder"]
-    $Global:PTS_Window.Resources["DynTileBg"]        = $Global:PTS_Brush["TileBg"]
-    $Global:PTS_Window.Resources["DynTileBorder"]    = $Global:PTS_Brush["TileBorder"]
-    $Global:PTS_Window.Resources["DynTileHoverBg"]   = $Global:PTS_Brush["TileHoverBg"]
-    $Global:PTS_Window.Resources["DynTileHoverBorder"] = $Global:PTS_Brush["TileHoverBorder"]
-    $Global:PTS_Window.Resources["DynBtnDisabledBg"] = $Global:PTS_Brush["BtnDisabledBg"]
-    $Global:PTS_Window.Resources["DynBtnDisabledFg"] = $Global:PTS_Brush["BtnDisabledFg"]
+    $Global:PTS_Window.Resources["DynTileBg"]            = $Global:PTS_Brush["TileBg"]
+    $Global:PTS_Window.Resources["DynTileBorder"]        = $Global:PTS_Brush["TileBorder"]
+    $Global:PTS_Window.Resources["DynTileHoverBg"]       = $Global:PTS_Brush["TileHoverBg"]
+    $Global:PTS_Window.Resources["DynTileHoverBorder"]   = $Global:PTS_Brush["TileHoverBorder"]
+    $Global:PTS_Window.Resources["DynBtnDisabledBg"]     = $Global:PTS_Brush["BtnDisabledBg"]
+    $Global:PTS_Window.Resources["DynBtnDisabledFg"]     = $Global:PTS_Brush["BtnDisabledFg"]
 }
 
 # ===========================================================================
@@ -246,7 +239,6 @@ function Global:Update-PTSStyles {
 
     <Window.Resources>
 
-        <!-- Dynamic color resources (updated on theme change) -->
         <SolidColorBrush x:Key="DynPrimary"            Color="#3B5BDB"/>
         <SolidColorBrush x:Key="DynPrimaryHover"       Color="#2540A8"/>
         <SolidColorBrush x:Key="DynBtnSecBg"           Color="#FFFFFF"/>
@@ -367,7 +359,7 @@ function Global:Update-PTSStyles {
         </Style>
 
         <Style x:Key="SidebarButton" TargetType="Button">
-            <Setter Property="Background"             Value="#1A2254"/>
+            <Setter Property="Background"             Value="#101D51"/>
             <Setter Property="BorderThickness"        Value="0"/>
             <Setter Property="Cursor"                 Value="Hand"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
@@ -397,7 +389,7 @@ function Global:Update-PTSStyles {
 
         <Grid Grid.Row="1" Grid.IsSharedSizeScope="True">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="260"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
@@ -407,8 +399,8 @@ function Global:Update-PTSStyles {
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
 
-            <!-- SIDEBAR LOGO - Row 0, Col 0 - same row as header -->
-            <Grid x:Name="SidebarGrid" Grid.Column="0" Grid.Row="0" Grid.RowSpan="4" Background="#1A2254">
+            <!-- SIDEBAR -->
+            <Grid x:Name="SidebarGrid" Grid.Column="0" Grid.Row="0" Grid.RowSpan="4" Background="#101D51">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" SharedSizeGroup="HeaderRow"/>
                     <RowDefinition Height="Auto"/>
@@ -418,10 +410,11 @@ function Global:Update-PTSStyles {
                 </Grid.RowDefinitions>
 
                 <!-- LOGO IMAGE -->
-                <Border Grid.Row="0" Padding="8,8,8,8" Background="#101D51">
+                <Border Grid.Row="0" Padding="12,10,12,10" Background="#101D51">
                     <Image Source="https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/logo/PowerToolsSuite_Logo_02_cut.png"
-                           Stretch="UniformToFill"
-                           Height="80"/>
+                           Stretch="Uniform"
+                           MaxHeight="70"
+                           HorizontalAlignment="Stretch"/>
                 </Border>
 
                 <Border x:Name="SidebarDivTop" Grid.Row="1" Height="1" Background="#232D6B"/>
@@ -500,7 +493,7 @@ function Global:Update-PTSStyles {
         <Border x:Name="FooterBorder" Grid.Row="2" Background="#FFFFFF" BorderBrush="#E0E5F5" BorderThickness="0,1,0,0">
             <Grid>
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="200"/>
+                    <ColumnDefinition Width="260"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -731,7 +724,6 @@ function Global:Build-PTSSidebar {
         $Global:PTS_UI.SidebarPanel.Children.Add($div) | Out-Null
     }
 
-    # Restore active state after rebuild
     if ($Global:PTS_ActiveSidebarBtn -ne $null) {
         foreach ($child in $Global:PTS_UI.SidebarPanel.Children) {
             if ($child -is [System.Windows.Controls.Button] -and
