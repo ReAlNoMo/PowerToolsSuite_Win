@@ -195,6 +195,7 @@ function Global:Apply-PTSTheme {
         $Global:PTS_UI.SidebarDivTop.Background   = $Global:PTS_Brush["SidebarDivider"]
         $Global:PTS_UI.SidebarDivBot.Background   = $Global:PTS_Brush["SidebarDivider"]
         $Global:PTS_UI.DarkModeLabel.Foreground   = $Global:PTS_Brush["SidebarText"]
+        $Global:PTS_UI.LogoBorder.Background      = $Global:PTS_Brush["SidebarBg"]
 
         Update-PTSStyles
         Build-PTSSidebar
@@ -410,7 +411,7 @@ function Global:Update-PTSStyles {
                 </Grid.RowDefinitions>
 
                 <!-- LOGO IMAGE -->
-                <Border Grid.Row="0" Padding="12,10,12,10" Background="#101D51">
+                <Border Grid.Row="0" x:Name="LogoBorder" Padding="12,10,12,10">
                     <Image Source="https://raw.githubusercontent.com/ReAlNoMo/PowerToolsSuite_Win/main/logo/PowerToolsSuite_Logo_02_cut.png"
                            Stretch="Uniform"
                            MaxHeight="70"
@@ -543,7 +544,10 @@ $Global:PTS_UI = @{
     BackBtn          = $Global:PTS_Window.FindName("BackBtn")
     DarkModeToggle   = $Global:PTS_Window.FindName("DarkModeToggle")
     DarkModeLabel    = $Global:PTS_Window.FindName("DarkModeLabel")
+    LogoBorder       = $Global:PTS_Window.FindName("LogoBorder")
 }
+
+$Global:PTS_UI.LogoBorder.Background = $Global:PTS_Brush["SidebarBg"]
 
 $Global:PTS_UI.DarkModeToggle.Add_Click({
     $isDark = [bool]$Global:PTS_UI.DarkModeToggle.IsChecked
