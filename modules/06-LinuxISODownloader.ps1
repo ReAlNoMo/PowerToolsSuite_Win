@@ -30,7 +30,7 @@ Register-PowerToolsModule `
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="120"/>
             </Grid.ColumnDefinitions>
-            <TextBox Grid.Column="0" x:Name="DestBox" Text="D:\ISOs" Height="40"
+            <TextBox Grid.Column="0" x:Name="DestBox" Text="" Height="40"
                      FontSize="13" Padding="12,10"
                      BorderThickness="1.5"
                      FontFamily="Cascadia Code, Consolas"
@@ -156,6 +156,12 @@ Register-PowerToolsModule `
     $Global:ISO_cancelFlag  = [System.Threading.CancellationTokenSource]::new()
     $Global:ISO_bgPS        = $null
     $Global:ISO_bgHandle    = $null
+
+    # Set default destination to user Downloads folder
+    $defaultDest = Join-Path $env:USERPROFILE "Downloads\ISOs"
+    if ([string]::IsNullOrWhiteSpace($Global:ISO_destBox.Text)) {
+        $Global:ISO_destBox.Text = $defaultDest
+    }
 
     # Apply theme-aware colors to TextBox and Log border
     $Global:ISO_destBox.Background  = $Global:PTS_Brush["InputBg"]
