@@ -205,7 +205,7 @@ function Global:Apply-PTSTheme {
         }
     }
 }
-
+ 
 function Global:Update-PTSStyles {
     $pbStyle = $Global:PTS_Window.FindResource("PrimaryButton")
     if ($pbStyle) { $pbStyle.IsSealed | Out-Null }
