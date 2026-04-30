@@ -801,14 +801,14 @@ Register-PowerToolsModule `
         $scb = $sw.FindName("SCB"); if ($scb) { $scb.Style = $sw.FindResource("SecondaryButton"); $csw=$sw; $scb.Add_Click({$csw.Close()}.GetNewClosure()) }
         $stack = $sw.FindName("SS")
         @(
-            @{Name="ISLC - Intelligent Standby List Cleaner";Rec="Very High";What="Clears Windows Standby Memory List. Prevents RAM stutter from cached data.";Why="One of the most effective tools overall. Stabilizes frametimes, reduces stutter spikes especially with 16-32GB RAM.";URL="https://www.wagnardsoft.com/";Cost="Free"}
-            @{Name="Process Lasso";Rec="High (Intel 12+ / AMD X3D)";What="CPU prioritization and core affinity per process. Automatic and persistent.";Why="Moves background processes to E-cores (Intel) or second CCD (AMD), reserves P-cores for game.";URL="https://bitsum.com/";Cost="Free / Pro available"}
-            @{Name="NVCleanstall";Rec="High (NVIDIA users)";What="Installs NVIDIA drivers without bloatware (GeForce Experience, telemetry, NVIDIA Container).";Why="Fewer background processes, less RAM usage, cleaner driver stack.";URL="https://www.techpowerup.com/nvcleanstall/";Cost="Free"}
-            @{Name="TimerResolution / TimerTool";Rec="High (Competitive)";What="Increases Windows timer resolution from default 15.6ms to 0.5ms.";Why="More precise process scheduling, more stable frametimes especially in competitive shooters.";URL="https://www.lucashale.com/timer-resolution/";Cost="Free"}
-            @{Name="DDU - Display Driver Uninstaller";Rec="High";What="Complete driver removal without residue. Use before every driver update.";Why="Prevents driver conflicts, stuttering from old driver remnants, micro-crashes.";URL="https://www.wagnardsoft.com/";Cost="Free"}
-            @{Name="MSI Afterburner + RTSS";Rec="High (Competitive)";What="GPU monitoring and FPS limiter.";Why="FPS limit to refresh rate -3 FPS reduces input lag significantly.";URL="https://www.msi.com/Landing/afterburner/";Cost="Free"}
-            @{Name="O&O ShutUp10++";Rec="Medium";What="GUI tool for telemetry, privacy, and background processes.";Why="Quick disabling of 50+ tracking/telemetry functions.";URL="https://www.oo-software.com/en/shutup10";Cost="Free"}
-            @{Name="InSpectre (Gibson Research)";Rec="Medium";What="Shows status of all CPU security mitigations (Spectre, Meltdown, Downfall).";Why="Visual control whether mitigations are active. Enables one-click deactivation if needed.";URL="https://www.grc.com/inspectre.htm";Cost="Free"}
+            @{Name="ISLC - Intelligent Standby List Cleaner";Rec="Very High";What="Clears Windows Standby Memory List. Prevents RAM stutter from cached data.";Why="One of the most effective tools overall. Stabilizes frametimes, reduces stutter spikes especially with 16-32GB RAM.";Cost="Free"}
+            @{Name="Process Lasso";Rec="High (Intel 12+ / AMD X3D)";What="CPU prioritization and core affinity per process. Automatic and persistent.";Why="Moves background processes to E-cores (Intel) or second CCD (AMD), reserves P-cores for game.";Cost="Free / Pro available"}
+            @{Name="NVCleanstall";Rec="High (NVIDIA users)";What="Installs NVIDIA drivers without bloatware (GeForce Experience, telemetry, NVIDIA Container).";Why="Fewer background processes, less RAM usage, cleaner driver stack.";Cost="Free"}
+            @{Name="TimerResolution / TimerTool";Rec="High (Competitive)";What="Increases Windows timer resolution from default 15.6ms to 0.5ms.";Why="More precise process scheduling, more stable frametimes especially in competitive shooters.";Cost="Free"}
+            @{Name="DDU - Display Driver Uninstaller";Rec="High";What="Complete driver removal without residue. Use before every driver update.";Why="Prevents driver conflicts, stuttering from old driver remnants, micro-crashes.";Cost="Free"}
+            @{Name="MSI Afterburner + RTSS";Rec="High (Competitive)";What="GPU monitoring and FPS limiter.";Why="FPS limit to refresh rate -3 FPS reduces input lag significantly.";Cost="Free"}
+            @{Name="O&O ShutUp10++";Rec="Medium";What="GUI tool for telemetry, privacy, and background processes.";Why="Quick disabling of 50+ tracking/telemetry functions.";Cost="Free"}
+            @{Name="InSpectre (Gibson Research)";Rec="Medium";What="Shows status of all CPU security mitigations (Spectre, Meltdown, Downfall).";Why="Visual control whether mitigations are active. Enables one-click deactivation if needed.";Cost="Free"}
         ) | ForEach-Object {
             $tool = $_
             $card = New-Object System.Windows.Controls.Border
@@ -821,9 +821,6 @@ Register-PowerToolsModule `
                 $lbl=New-Object System.Windows.Controls.TextBlock; $lbl.Text=$pair.L; $lbl.FontSize=9; $lbl.FontWeight="Bold"; $lbl.Foreground=$Global:PTS_Brush["TextMuted"]; $lbl.Margin="0,0,0,2"; $cs.Children.Add($lbl)|Out-Null
                 $txt=New-Object System.Windows.Controls.TextBlock; $txt.Text=$pair.T; $txt.FontSize=12; $txt.TextWrapping="Wrap"; $txt.Foreground=$Global:PTS_Brush["TextDark"]; $txt.Margin="0,0,0,8"; $cs.Children.Add($txt)|Out-Null
             }
-            $url=New-Object System.Windows.Controls.TextBlock; $url.Text=$tool.URL; $url.FontSize=11; $url.FontFamily="Cascadia Code, Consolas"
-            $url.Foreground=$Global:PTS_Brush["Primary"]; $url.Cursor=[System.Windows.Input.Cursors]::Hand; $url.TextDecorations=[System.Windows.TextDecorations]::Underline
-            $cu=$tool.URL; $url.Add_MouseLeftButtonUp({Start-Process $cu}.GetNewClosure()); $cs.Children.Add($url)|Out-Null
             $card.Child=$cs; $stack.Children.Add($card)|Out-Null
         }
         $sw.Show()
