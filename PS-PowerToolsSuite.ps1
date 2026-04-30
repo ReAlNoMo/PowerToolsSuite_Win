@@ -234,6 +234,7 @@ function Global:Update-PTSStyles {
     Title="PowerTools Suite"
     Width="1060" Height="792"
     MinWidth="900" MinHeight="600"
+    WindowState="Maximized"
     WindowStartupLocation="CenterScreen"
     Background="#F4F6FB"
     FontFamily="Segoe UI">
