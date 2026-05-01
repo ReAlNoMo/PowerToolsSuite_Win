@@ -312,6 +312,150 @@ Register-PowerToolsModule `
     }
 
     # ===========================================================================
+    # RELEASE URL RESOLVERS
+    # ===========================================================================
+    function Global:ISO-EnableTls {
+        try {
+            $proto = [System.Net.SecurityProtocolType]::Tls12
+            if ([enum]::GetNames([System.Net.SecurityProtocolType]) -contains "Tls13") {
+                $proto = $proto -bor [System.Net.SecurityProtocolType]::Tls13
+            }
+            [System.Net.ServicePointManager]::SecurityProtocol = $proto
+        } catch {}
+    }
+
+    function Global:ISO-GetNewestVersion {
+        param([string[]]$Versions)
+        $parsed = foreach ($v in ($Versions | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })) {
+            try {
+                [PSCustomObject]@{ Raw = $v; Ver = [version]$v }
+            } catch {}
+        }
+        if (-not $parsed) { return $null }
+        return ($parsed | Sort-Object Ver -Descending | Select-Object -First 1).Raw
+    }
+
+    function Global:ISO-GetRedirectLocation {
+        param([string]$Url)
+        try {
+            $hdr = & curl.exe -I --max-time 20 $Url 2>$null
+            if ($LASTEXITCODE -ne 0 -or -not $hdr) { return $null }
+            foreach ($line in $hdr) {
+                if ($line -match "^[Ll]ocation:\s*(\S+)\s*$") {
+                    return $Matches[1].Trim()
+                }
+            }
+        } catch {}
+        return $null
+    }
+
+    function Global:ISO-GetLatestUbuntuUrls {
+        ISO-EnableTls
+        try {
+            $index = (Invoke-WebRequest -UseBasicParsing -Uri "https://releases.ubuntu.com/releases/" -TimeoutSec 25 -ErrorAction Stop).Content
+            $versions = [regex]::Matches($index, "Ubuntu\s+(\d+\.\d+(?:\.\d+)?)") | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+            $latest = ISO-GetNewestVersion -Versions $versions
+            if (-not $latest) { return @() }
+
+            $dirContent = (Invoke-WebRequest -UseBasicParsing -Uri ("https://releases.ubuntu.com/{0}/" -f $latest) -TimeoutSec 25 -ErrorAction Stop).Content
+            $isoFiles = [regex]::Matches($dirContent, "ubuntu-[0-9.]+-desktop-amd64\.iso") | ForEach-Object { $_.Value } | Select-Object -Unique
+            if (-not $isoFiles -or $isoFiles.Count -eq 0) {
+                $isoFiles = @("ubuntu-$latest-desktop-amd64.iso")
+            }
+
+            return @($isoFiles | ForEach-Object { "https://releases.ubuntu.com/$latest/$_" })
+        } catch {
+            return @()
+        }
+    }
+
+    function Global:ISO-GetLatestDebianUrls {
+        ISO-EnableTls
+        try {
+            $downloadPage = (Invoke-WebRequest -UseBasicParsing -Uri "https://www.debian.org/download.en.html" -TimeoutSec 25 -ErrorAction Stop).Content
+            $isoName = [regex]::Match($downloadPage, "debian-\d+(?:\.\d+){2}-amd64-netinst\.iso").Value
+            if (-not $isoName) { return @() }
+
+            $primary = "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/$isoName"
+            $knownMirror = "https://saimei.ftp.acc.umu.se/debian-cd/current/amd64/iso-cd/$isoName"
+            $mirror = ISO-GetRedirectLocation -Url $primary
+
+            $list = New-Object System.Collections.Generic.List[string]
+            if (-not [string]::IsNullOrWhiteSpace($mirror)) { $list.Add($mirror) }
+            $list.Add($knownMirror)
+            $list.Add($primary)
+            return @($list | Select-Object -Unique)
+        } catch {
+            return @()
+        }
+    }
+
+    function Global:ISO-GetLatestFedoraUrls {
+        ISO-EnableTls
+        try {
+            $pkgPage = (Invoke-WebRequest -UseBasicParsing -Uri "https://packages.fedoraproject.org/pkgs/fedora-release/fedora-release/" -TimeoutSec 25 -ErrorAction Stop).Content
+            $versions = [regex]::Matches($pkgPage, "Fedora\s+(\d+)") | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
+            $release = ($versions | ForEach-Object { [int]$_ } | Sort-Object -Descending | Select-Object -First 1)
+            if (-not $release) { return @() }
+
+            $bases = @(
+                "https://download.fedoraproject.org/pub/fedora/linux/releases",
+                "https://download-ib01.fedoraproject.org/pub/fedora/linux/releases"
+            )
+
+            $resolvedName = $null
+            for ($minor = 9; $minor -ge 0 -and -not $resolvedName; $minor--) {
+                $rev = "1.$minor"
+                foreach ($candidateName in @(
+                    "Fedora-Workstation-Live-$release-$rev.x86_64.iso",
+                    "Fedora-Workstation-Live-x86_64-$release-$rev.iso"
+                )) {
+                    $probeUrl = "$($bases[0])/$release/Workstation/x86_64/iso/$candidateName"
+                    $code = (& curl.exe -I -L --max-time 15 -s -o NUL -w "%{http_code}" $probeUrl 2>$null)
+                    if ($LASTEXITCODE -eq 0 -and $code -eq "200") {
+                        $resolvedName = $candidateName
+                        break
+                    }
+                }
+            }
+
+            if ($resolvedName) {
+                return @($bases | ForEach-Object { "$_/$release/Workstation/x86_64/iso/$resolvedName" })
+            }
+
+            $urls = New-Object System.Collections.Generic.List[string]
+            foreach ($base in $bases) {
+                for ($minor = 9; $minor -ge 0; $minor--) {
+                    $rev = "1.$minor"
+                    $urls.Add("$base/$release/Workstation/x86_64/iso/Fedora-Workstation-Live-$release-$rev.x86_64.iso")
+                    $urls.Add("$base/$release/Workstation/x86_64/iso/Fedora-Workstation-Live-x86_64-$release-$rev.iso")
+                }
+            }
+            return @($urls | Select-Object -Unique)
+        } catch {
+            return @()
+        }
+    }
+
+    function Global:ISO-GetLatestCachyOSUrls {
+        ISO-EnableTls
+        try {
+            $index = Invoke-WebRequest -UseBasicParsing -Uri "https://mirror.cachyos.org/ISO/desktop/" -TimeoutSec 25 -ErrorAction Stop
+            $dirs = $index.Links | Where-Object { $_.href -match "^\d{6}/$" } | ForEach-Object { $_.href.TrimEnd("/") }
+            if (-not $dirs -or $dirs.Count -eq 0) { return @() }
+
+            $latestDir = ($dirs | Sort-Object -Descending | Select-Object -First 1)
+            $dirPage = Invoke-WebRequest -UseBasicParsing -Uri "https://mirror.cachyos.org/ISO/desktop/$latestDir/" -TimeoutSec 25 -ErrorAction Stop
+            $iso = $dirPage.Links | Where-Object { $_.href -match "^cachyos-desktop-linux-\d{6}\.iso$" } | Select-Object -First 1 -ExpandProperty href
+            if (-not $iso) { $iso = "cachyos-desktop-linux-$latestDir.iso" }
+
+            return @("https://mirror.cachyos.org/ISO/desktop/$latestDir/$iso")
+        } catch {
+            return @()
+        }
+    }
+
+    # ===========================================================================
     # ISO DEFINITIONS
     # ===========================================================================
     function Global:ISO-GetJobList {
@@ -320,36 +464,53 @@ Register-PowerToolsModule `
         $jobs = @()
 
         if ($Global:ISO_cbUbuntu.IsChecked) {
+            $ubuntuUrls = ISO-GetLatestUbuntuUrls
+            if (-not $ubuntuUrls -or $ubuntuUrls.Count -eq 0) {
+                $ubuntuUrls = @(
+                    "https://releases.ubuntu.com/26.04/ubuntu-26.04-desktop-amd64.iso",
+                    "https://releases.ubuntu.com/24.04/ubuntu-24.04.4-desktop-amd64.iso"
+                )
+            }
+
             $jobs += @{
                 IsoName  = "Ubuntu"
                 FileName = "ubuntu-latest-amd64.iso"
                 OutFile  = Join-Path $Dest "ubuntu-latest-amd64.iso"
-                UrlList  = @(
-                    "https://releases.ubuntu.com/noble/ubuntu-24.04.2-desktop-amd64.iso",
-                    "https://releases.ubuntu.com/24.04/ubuntu-24.04.2-desktop-amd64.iso"
-                )
+                UrlList  = @($ubuntuUrls)
             }
         }
 
         if ($Global:ISO_cbDebian.IsChecked) {
+            $debianUrls = ISO-GetLatestDebianUrls
+            if (-not $debianUrls -or $debianUrls.Count -eq 0) {
+                $debianUrls = @(
+                    "https://saimei.ftp.acc.umu.se/debian-cd/current/amd64/iso-cd/debian-13.4.0-amd64-netinst.iso",
+                    "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-13.4.0-amd64-netinst.iso"
+                )
+            }
+
             $jobs += @{
                 IsoName  = "Debian"
                 FileName = "debian-latest-amd64.iso"
                 OutFile  = Join-Path $Dest "debian-latest-amd64.iso"
-                UrlList  = @(
-                    "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/debian-12.10.0-amd64-netinst.iso"
-                )
+                UrlList  = @($debianUrls)
             }
         }
 
         if ($Global:ISO_cbFedora.IsChecked) {
+            $fedoraUrls = ISO-GetLatestFedoraUrls
+            if (-not $fedoraUrls -or $fedoraUrls.Count -eq 0) {
+                $fedoraUrls = @(
+                    "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Workstation/x86_64/iso/Fedora-Workstation-Live-44-1.7.x86_64.iso",
+                    "https://download-ib01.fedoraproject.org/pub/fedora/linux/releases/44/Workstation/x86_64/iso/Fedora-Workstation-Live-44-1.7.x86_64.iso"
+                )
+            }
+
             $jobs += @{
                 IsoName  = "Fedora"
                 FileName = "fedora-latest-amd64.iso"
                 OutFile  = Join-Path $Dest "fedora-latest-amd64.iso"
-                UrlList  = @(
-                    "https://download.fedoraproject.org/pub/fedora/linux/releases/41/Workstation/x86_64/iso/Fedora-Workstation-Live-x86_64-41-1.4.iso"
-                )
+                UrlList  = @($fedoraUrls)
             }
         }
 
@@ -366,13 +527,19 @@ Register-PowerToolsModule `
         }
 
         if ($Global:ISO_cbCachyOS.IsChecked) {
+            $cachyUrls = ISO-GetLatestCachyOSUrls
+            if (-not $cachyUrls -or $cachyUrls.Count -eq 0) {
+                $cachyUrls = @(
+                    "https://mirror.cachyos.org/ISO/desktop/260426/cachyos-desktop-linux-260426.iso",
+                    "https://iso.cachyos.org/desktop/260426/cachyos-desktop-linux-260426.iso"
+                )
+            }
+
             $jobs += @{
                 IsoName  = "CachyOS"
                 FileName = "cachyos-latest-amd64.iso"
                 OutFile  = Join-Path $Dest "cachyos-latest-amd64.iso"
-                UrlList  = @(
-                    "https://mirror.cachyos.org/ISO/kde/latest/cachyos-kde-linux-x86_64.iso"
-                )
+                UrlList  = @($cachyUrls)
             }
         }
 
