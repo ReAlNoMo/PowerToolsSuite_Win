@@ -363,7 +363,12 @@ Register-PowerToolsModule `
                 $isoFiles = @("ubuntu-$latest-desktop-amd64.iso")
             }
 
-            return @($isoFiles | ForEach-Object { "https://releases.ubuntu.com/$latest/$_" })
+            $urls = New-Object System.Collections.Generic.List[string]
+            foreach ($iso in $isoFiles) {
+                $urls.Add("https://mirrors.edge.kernel.org/ubuntu-releases/$latest/$iso")
+                $urls.Add("https://releases.ubuntu.com/$latest/$iso")
+            }
+            return @($urls | Select-Object -Unique)
         } catch {
             return @()
         }
@@ -467,6 +472,7 @@ Register-PowerToolsModule `
             $ubuntuUrls = ISO-GetLatestUbuntuUrls
             if (-not $ubuntuUrls -or $ubuntuUrls.Count -eq 0) {
                 $ubuntuUrls = @(
+                    "https://mirrors.edge.kernel.org/ubuntu-releases/26.04/ubuntu-26.04-desktop-amd64.iso",
                     "https://releases.ubuntu.com/26.04/ubuntu-26.04-desktop-amd64.iso",
                     "https://releases.ubuntu.com/24.04/ubuntu-24.04.4-desktop-amd64.iso"
                 )
@@ -566,9 +572,62 @@ Register-PowerToolsModule `
 
         function Q-Log  { param($M,$T) $Queue.Enqueue([PSCustomObject]@{Type="LOG";Msg=$M;Tag=$T}) }
         function Q-Prog { param($P,$S) $Queue.Enqueue([PSCustomObject]@{Type="PROGRESS";Pct=$P;Status=$S}) }
+        function Q-Err {
+            param(
+                [string]$Context,
+                [string]$Url,
+                [int]$Attempt,
+                [System.Exception]$Exception,
+                [string]$ExtraMessage
+            )
+
+            if ([string]::IsNullOrWhiteSpace($Job.ErrorLogPath)) { return }
+            try {
+                $entry = [ordered]@{
+                    timestamp_utc = (Get-Date).ToUniversalTime().ToString("o")
+                    context       = $Context
+                    module_id     = "linux-iso-downloader"
+                    distro        = $Job.IsoName
+                    output_file   = $Job.OutFile
+                    url           = $Url
+                    attempt       = $Attempt
+                    machine_name  = $env:COMPUTERNAME
+                    ps_version    = $PSVersionTable.PSVersion.ToString()
+                    process_id    = $PID
+                    exception     = if ($Exception) {
+                        [ordered]@{
+                            type      = $Exception.GetType().FullName
+                            message   = $Exception.Message
+                            hresult   = $Exception.HResult
+                            source    = $Exception.Source
+                            stack     = $Exception.StackTrace
+                            inner_msg = if ($Exception.InnerException) { $Exception.InnerException.Message } else { $null }
+                        }
+                    } else { $null }
+                    message       = $ExtraMessage
+                }
+
+                [System.IO.File]::AppendAllText(
+                    $Job.ErrorLogPath,
+                    (($entry | ConvertTo-Json -Depth 7 -Compress) + [Environment]::NewLine),
+                    [System.Text.UTF8Encoding]::new($false)
+                )
+            } catch {}
+        }
 
         $result = [PSCustomObject]@{ Success=$false; IsoName=$Job.IsoName; Message="" }
         $tmp    = "$($Job.OutFile).tmp"
+        $fs = $null
+        $stream = $null
+        $resp = $null
+
+        try {
+            $proto = [System.Net.SecurityProtocolType]::Tls12
+            if ([enum]::GetNames([System.Net.SecurityProtocolType]) -contains "Tls13") {
+                $proto = $proto -bor [System.Net.SecurityProtocolType]::Tls13
+            }
+            [System.Net.ServicePointManager]::SecurityProtocol = $proto
+        } catch {}
 
         if ($CancelToken.IsCancellationRequested) {
             $result.Message = "Cancelled"
@@ -580,60 +639,82 @@ Register-PowerToolsModule `
 
         foreach ($url in $Job.UrlList) {
             if ($CancelToken.IsCancellationRequested) { break }
-            try {
-                $req = [System.Net.HttpWebRequest]::Create($url)
-                $req.AllowAutoRedirect = $true
-                $req.UserAgent = "PowerTools-Suite-ISODownloader/1.0"
-                $req.Timeout   = 15000
-                $resp   = $req.GetResponse()
-                $total  = $resp.ContentLength
-                $stream = $resp.GetResponseStream()
-                $fs     = [System.IO.File]::Create($tmp)
-                $buf    = New-Object byte[] (128KB)
-                $read   = 0
-                $sw     = [System.Diagnostics.Stopwatch]::StartNew()
-                $lastReport = 0
+            for ($attempt = 1; $attempt -le 2 -and -not $downloaded; $attempt++) {
+                if ($CancelToken.IsCancellationRequested) { break }
+                try {
+                    $req = [System.Net.HttpWebRequest]::Create($url)
+                    $req.AllowAutoRedirect = $true
+                    $req.UserAgent = "PowerTools-Suite-ISODownloader/1.0"
+                    $req.AutomaticDecompression = [System.Net.DecompressionMethods]::GZip -bor [System.Net.DecompressionMethods]::Deflate
+                    $req.KeepAlive = $true
+                    $req.Timeout = 60000
+                    $req.ReadWriteTimeout = 60000
+                    $resp   = $req.GetResponse()
+                    $total  = $resp.ContentLength
+                    $stream = $resp.GetResponseStream()
+                    $fs     = [System.IO.File]::Create($tmp)
+                    $buf    = New-Object byte[] (128KB)
+                    $read   = 0
+                    $sw     = [System.Diagnostics.Stopwatch]::StartNew()
+                    $lastReport = 0
 
-                while (-not $CancelToken.IsCancellationRequested) {
-                    $n = $stream.Read($buf, 0, $buf.Length)
-                    if ($n -le 0) { break }
-                    $fs.Write($buf, 0, $n)
-                    $read += $n
+                    while (-not $CancelToken.IsCancellationRequested) {
+                        $n = $stream.Read($buf, 0, $buf.Length)
+                        if ($n -le 0) { break }
+                        $fs.Write($buf, 0, $n)
+                        $read += $n
 
-                    if ($sw.ElapsedMilliseconds - $lastReport -ge 500) {
-                        $lastReport = $sw.ElapsedMilliseconds
-                        $mbDone  = [math]::Round($read / 1MB, 1)
-                        $mbTotal = if ($total -gt 0) { [math]::Round($total / 1MB, 1) } else { "?" }
-                        $speed   = if ($sw.Elapsed.TotalSeconds -gt 0) {
-                            [math]::Round($read / 1MB / $sw.Elapsed.TotalSeconds, 1)
-                        } else { 0 }
-                        $eta = if ($total -gt 0 -and $speed -gt 0) {
-                            "$([math]::Round(($total - $read) / 1MB / $speed))s"
-                        } else { "..." }
-                        $filePct    = if ($total -gt 0) { [int](($read / $total) * 100) } else { 0 }
-                        $overallPct = [int](($JobIndex / $TotalJobs) * 100) + [int]($filePct / $TotalJobs)
-                        Q-Prog $overallPct "$($Job.IsoName)  |  ${mbDone}MB / ${mbTotal}MB  |  ${speed} MB/s  |  ETA: $eta"
+                        if ($sw.ElapsedMilliseconds - $lastReport -ge 500) {
+                            $lastReport = $sw.ElapsedMilliseconds
+                            $mbDone  = [math]::Round($read / 1MB, 1)
+                            $mbTotal = if ($total -gt 0) { [math]::Round($total / 1MB, 1) } else { "?" }
+                            $speed   = if ($sw.Elapsed.TotalSeconds -gt 0) {
+                                [math]::Round($read / 1MB / $sw.Elapsed.TotalSeconds, 1)
+                            } else { 0 }
+                            $eta = if ($total -gt 0 -and $speed -gt 0) {
+                                "$([math]::Round(($total - $read) / 1MB / $speed))s"
+                            } else { "..." }
+                            $filePct    = if ($total -gt 0) { [int](($read / $total) * 100) } else { 0 }
+                            $overallPct = [int](($JobIndex / $TotalJobs) * 100) + [int]($filePct / $TotalJobs)
+                            Q-Prog $overallPct "$($Job.IsoName)  |  ${mbDone}MB / ${mbTotal}MB  |  ${speed} MB/s  |  ETA: $eta"
+                        }
+                    }
+
+                    $fs.Close()
+                    $stream.Close()
+                    $resp.Close()
+                    $fs = $null
+                    $stream = $null
+                    $resp = $null
+
+                    if (-not $CancelToken.IsCancellationRequested) {
+                        Move-Item -Path $tmp -Destination $Job.OutFile -Force
+                        $sizeMB = [math]::Round((Get-Item $Job.OutFile).Length / 1MB, 1)
+                        Q-Log "Downloaded: $($Job.FileName) (${sizeMB} MB)" "OK"
+                        $result.Success = $true
+                        $downloaded = $true
+                        break
+                    }
+
+                } catch {
+                    if ($null -ne $fs) { try { $fs.Close() } catch {} }
+                    if ($null -ne $stream) { try { $stream.Close() } catch {} }
+                    if ($null -ne $resp) { try { $resp.Close() } catch {} }
+                    $fs = $null
+                    $stream = $null
+                    $resp = $null
+                    if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
+
+                    $msg = $_.Exception.Message
+                    Q-Log "URL failed ($url) [attempt $attempt/2]: $msg" "WARN"
+                    Q-Err -Context "LinuxISO.DownloadAttemptFailed" -Url $url -Attempt $attempt -Exception $_.Exception -ExtraMessage $_.ToString()
+
+                    if ($attempt -lt 2 -and -not $CancelToken.IsCancellationRequested) {
+                        Start-Sleep -Seconds (2 * $attempt)
                     }
                 }
-
-                $fs.Close()
-                $stream.Close()
-                $resp.Close()
-
-                if (-not $CancelToken.IsCancellationRequested) {
-                    Move-Item -Path $tmp -Destination $Job.OutFile -Force
-                    $sizeMB = [math]::Round((Get-Item $Job.OutFile).Length / 1MB, 1)
-                    Q-Log "Downloaded: $($Job.FileName) (${sizeMB} MB)" "OK"
-                    $result.Success = $true
-                    $downloaded = $true
-                    break
-                }
-
-            } catch {
-                if ($null -ne $fs) { try { $fs.Close() } catch {} }
-                if (Test-Path $tmp) { Remove-Item $tmp -Force -ErrorAction SilentlyContinue }
-                Q-Log "URL failed ($url): $_" "WARN"
             }
+            if ($downloaded) { break }
         }
 
         if (-not $downloaded -and -not $CancelToken.IsCancellationRequested) {
@@ -801,8 +882,19 @@ Register-PowerToolsModule `
                 ISO-AddLog "No distributions selected." "WARN"
                 return
             }
+
+            $errorLogPath = if (Get-Command -Name Get-PowerToolsErrorLogPath -ErrorAction SilentlyContinue) {
+                Get-PowerToolsErrorLogPath
+            } else {
+                Join-Path $env:TEMP "PowerToolsSuite-errors.jsonl"
+            }
+            foreach ($job in $jobs) {
+                $job.ErrorLogPath = $errorLogPath
+            }
+
             ISO-AddLog "Selected distributions: $((@($jobs | ForEach-Object { $_.IsoName }) -join ', '))" "INFO"
             ISO-AddLog "Destination: $dest" "INFO"
+            ISO-AddLog "Detailed error log: $errorLogPath" "INFO"
 
             $Global:ISO_cancelFlag = [System.Threading.CancellationTokenSource]::new()
             $token = $Global:ISO_cancelFlag.Token

@@ -52,6 +52,109 @@ Add-Type -AssemblyName System.Windows.Forms
 
 $Global:PTS_RootPath    = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Global:PTS_ModulesPath = Join-Path $Global:PTS_RootPath "modules"
+$Global:PTS_LogRootPath = Join-Path $Global:PTS_RootPath "logs"
+$Global:PTS_LogSessionId = [guid]::NewGuid().ToString()
+$Global:PTS_ErrorLogPath = Join-Path $Global:PTS_LogRootPath ("errors-{0}.jsonl" -f (Get-Date -Format "yyyy-MM-dd"))
+$Global:PTS_LogLock = New-Object object
+
+function Global:Initialize-PowerToolsLogging {
+    try {
+        if (-not (Test-Path -LiteralPath $Global:PTS_LogRootPath)) {
+            New-Item -ItemType Directory -Path $Global:PTS_LogRootPath -Force | Out-Null
+        }
+    } catch {
+        Write-Warning "Could not create log directory at '$($Global:PTS_LogRootPath)': $($_.Exception.Message)"
+    }
+}
+
+function Global:Get-PowerToolsErrorLogPath {
+    return $Global:PTS_ErrorLogPath
+}
+
+function Global:Write-PTSExceptionReport {
+    param(
+        [Parameter(Mandatory)][string]$Context,
+        [string]$ModuleId,
+        [string]$ModuleName,
+        [string]$ModuleFile,
+        [System.Management.Automation.ErrorRecord]$ErrorRecord,
+        [System.Exception]$Exception,
+        [hashtable]$Extra = @{}
+    )
+
+    try {
+        Initialize-PowerToolsLogging
+
+        $ex = if ($Exception) { $Exception } elseif ($ErrorRecord) { $ErrorRecord.Exception } else { $null }
+        $inv = if ($ErrorRecord) { $ErrorRecord.InvocationInfo } else { $null }
+
+        $entry = [ordered]@{
+            timestamp_utc = (Get-Date).ToUniversalTime().ToString("o")
+            session_id    = $Global:PTS_LogSessionId
+            context       = $Context
+            module        = [ordered]@{
+                id   = $ModuleId
+                name = $ModuleName
+                file = $ModuleFile
+            }
+            host = [ordered]@{
+                machine_name = $env:COMPUTERNAME
+                user_name    = $env:USERNAME
+                os           = [System.Environment]::OSVersion.VersionString
+                ps_version   = $PSVersionTable.PSVersion.ToString()
+                process_id   = $PID
+                is_admin     = (Test-IsAdmin)
+            }
+            exception = if ($ex) {
+                [ordered]@{
+                    type                  = $ex.GetType().FullName
+                    message               = $ex.Message
+                    hresult               = $ex.HResult
+                    source                = $ex.Source
+                    stack_trace           = $ex.StackTrace
+                    inner_exception_type  = if ($ex.InnerException) { $ex.InnerException.GetType().FullName } else { $null }
+                    inner_exception_msg   = if ($ex.InnerException) { $ex.InnerException.Message } else { $null }
+                }
+            } else { $null }
+            error_record = if ($ErrorRecord) {
+                [ordered]@{
+                    message                = $ErrorRecord.ToString()
+                    category               = $ErrorRecord.CategoryInfo.Category.ToString()
+                    category_reason        = $ErrorRecord.CategoryInfo.Reason
+                    category_target_name   = $ErrorRecord.CategoryInfo.TargetName
+                    category_target_type   = $ErrorRecord.CategoryInfo.TargetType
+                    fully_qualified_id     = $ErrorRecord.FullyQualifiedErrorId
+                    script_stack_trace     = $ErrorRecord.ScriptStackTrace
+                    position_message       = $ErrorRecord.InvocationInfo.PositionMessage
+                    command_name           = $ErrorRecord.InvocationInfo.MyCommand?.Name
+                    script_name            = $ErrorRecord.InvocationInfo.ScriptName
+                    script_line_number     = $ErrorRecord.InvocationInfo.ScriptLineNumber
+                    offset_in_line         = $ErrorRecord.InvocationInfo.OffsetInLine
+                    line                   = $ErrorRecord.InvocationInfo.Line
+                }
+            } else { $null }
+            extra = $Extra
+        }
+
+        $line = ($entry | ConvertTo-Json -Depth 8 -Compress)
+        [System.Threading.Monitor]::Enter($Global:PTS_LogLock)
+        try {
+            [System.IO.File]::AppendAllText(
+                $Global:PTS_ErrorLogPath,
+                $line + [Environment]::NewLine,
+                [System.Text.UTF8Encoding]::new($false)
+            )
+        } finally {
+            if ([System.Threading.Monitor]::IsEntered($Global:PTS_LogLock)) {
+                [System.Threading.Monitor]::Exit($Global:PTS_LogLock)
+            }
+        }
+    } catch {
+        Write-Warning "Failed to write error report: $($_.Exception.Message)"
+    }
+}
+
+Initialize-PowerToolsLogging
 
 # ===========================================================================
 # CATEGORY MAP
@@ -524,6 +627,21 @@ function Global:Update-PTSStyles {
 $reader            = New-Object System.Xml.XmlNodeReader $xaml
 $Global:PTS_Window = [Windows.Markup.XamlReader]::Load($reader)
 
+$Global:PTS_Window.Add_DispatcherUnhandledException({
+    param($sender, $e)
+    Write-PTSExceptionReport -Context "WPF.DispatcherUnhandledException" -Exception $e.Exception -Extra @{
+        handled_before = $e.Handled
+    }
+})
+
+[System.AppDomain]::CurrentDomain.add_UnhandledException({
+    param($sender, $eventArgs)
+    $ex = $eventArgs.ExceptionObject -as [System.Exception]
+    Write-PTSExceptionReport -Context "AppDomain.UnhandledException" -Exception $ex -Extra @{
+        is_terminating = $eventArgs.IsTerminating
+    }
+})
+
 # ===========================================================================
 # CACHE UI REFERENCES
 # ===========================================================================
@@ -583,8 +701,12 @@ function Global:Register-PowerToolsModule {
 
 if (Test-Path $Global:PTS_ModulesPath) {
     Get-ChildItem -Path $Global:PTS_ModulesPath -Filter "*.ps1" | Sort-Object Name | ForEach-Object {
-        try   { . $_.FullName }
-        catch { Write-Warning "Failed to load module $($_.Name): $_" }
+        $moduleFile = $_.FullName
+        try   { . $moduleFile }
+        catch {
+            Write-Warning "Failed to load module $([System.IO.Path]::GetFileName($moduleFile)): $_"
+            Write-PTSExceptionReport -Context "ModuleLoad" -ModuleFile $moduleFile -ErrorRecord $_
+        }
     }
 }
 
@@ -765,8 +887,15 @@ function Global:Show-PTSModuleView {
         $Global:PTS_UI.ContentScroller.ScrollToTop()
     }
     catch {
+        Write-PTSExceptionReport `
+            -Context "ModuleView.Load" `
+            -ModuleId $Module.Id `
+            -ModuleName $Module.Name `
+            -ErrorRecord $_
+
+        $logPath = Get-PowerToolsErrorLogPath
         [System.Windows.MessageBox]::Show(
-            "Failed to load module:`n`n$_",
+            "Failed to load module:`n`n$_`n`nDetailed error report:`n$logPath",
             "Module Error",
             [System.Windows.MessageBoxButton]::OK,
             [System.Windows.MessageBoxImage]::Error
