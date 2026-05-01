@@ -245,6 +245,12 @@ Register-PowerToolsModule `
         $Global:ISO_cancelBtn.IsEnabled = $Busy
         $Global:ISO_startBtn.Content    = if ($Busy) { "Downloading..." } else { "Start Download" }
     }
+    
+    function Global:ISO-PumpUi {
+        try {
+            [System.Windows.Forms.Application]::DoEvents()
+        } catch {}
+    }
 
     function Global:ISO-CleanupBackground {
         if ($null -ne $Global:ISO_bgPS) {
@@ -352,12 +358,12 @@ Register-PowerToolsModule `
     function Global:ISO-GetLatestUbuntuUrls {
         ISO-EnableTls
         try {
-            $index = (Invoke-WebRequest -UseBasicParsing -Uri "https://releases.ubuntu.com/releases/" -TimeoutSec 25 -ErrorAction Stop).Content
+            $index = (Invoke-WebRequest -UseBasicParsing -Uri "https://releases.ubuntu.com/releases/" -TimeoutSec 8 -ErrorAction Stop).Content
             $versions = [regex]::Matches($index, "Ubuntu\s+(\d+\.\d+(?:\.\d+)?)") | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
             $latest = ISO-GetNewestVersion -Versions $versions
             if (-not $latest) { return @() }
 
-            $dirContent = (Invoke-WebRequest -UseBasicParsing -Uri ("https://releases.ubuntu.com/{0}/" -f $latest) -TimeoutSec 25 -ErrorAction Stop).Content
+            $dirContent = (Invoke-WebRequest -UseBasicParsing -Uri ("https://releases.ubuntu.com/{0}/" -f $latest) -TimeoutSec 8 -ErrorAction Stop).Content
             $isoFiles = [regex]::Matches($dirContent, "ubuntu-[0-9.]+-desktop-amd64\.iso") | ForEach-Object { $_.Value } | Select-Object -Unique
             if (-not $isoFiles -or $isoFiles.Count -eq 0) {
                 $isoFiles = @("ubuntu-$latest-desktop-amd64.iso")
@@ -377,7 +383,7 @@ Register-PowerToolsModule `
     function Global:ISO-GetLatestDebianUrls {
         ISO-EnableTls
         try {
-            $downloadPage = (Invoke-WebRequest -UseBasicParsing -Uri "https://www.debian.org/download.en.html" -TimeoutSec 25 -ErrorAction Stop).Content
+            $downloadPage = (Invoke-WebRequest -UseBasicParsing -Uri "https://www.debian.org/download.en.html" -TimeoutSec 8 -ErrorAction Stop).Content
             $isoName = [regex]::Match($downloadPage, "debian-\d+(?:\.\d+){2}-amd64-netinst\.iso").Value
             if (-not $isoName) { return @() }
 
@@ -398,7 +404,7 @@ Register-PowerToolsModule `
     function Global:ISO-GetLatestFedoraUrls {
         ISO-EnableTls
         try {
-            $pkgPage = (Invoke-WebRequest -UseBasicParsing -Uri "https://packages.fedoraproject.org/pkgs/fedora-release/fedora-release/" -TimeoutSec 25 -ErrorAction Stop).Content
+            $pkgPage = (Invoke-WebRequest -UseBasicParsing -Uri "https://packages.fedoraproject.org/pkgs/fedora-release/fedora-release/" -TimeoutSec 8 -ErrorAction Stop).Content
             $versions = [regex]::Matches($pkgPage, "Fedora\s+(\d+)") | ForEach-Object { $_.Groups[1].Value } | Select-Object -Unique
             $release = ($versions | ForEach-Object { [int]$_ } | Sort-Object -Descending | Select-Object -First 1)
             if (-not $release) { return @() }
@@ -409,20 +415,23 @@ Register-PowerToolsModule `
             )
 
             $resolvedName = $null
-            for ($minor = 9; $minor -ge 0 -and -not $resolvedName; $minor--) {
-                $rev = "1.$minor"
-                foreach ($candidateName in @(
-                    "Fedora-Workstation-Live-$release-$rev.x86_64.iso",
-                    "Fedora-Workstation-Live-x86_64-$release-$rev.iso"
-                )) {
-                    $probeUrl = "$($bases[0])/$release/Workstation/x86_64/iso/$candidateName"
-                    $code = (& curl.exe -I -L --max-time 15 -s -o NUL -w "%{http_code}" $probeUrl 2>$null)
-                    if ($LASTEXITCODE -eq 0 -and $code -eq "200") {
-                        $resolvedName = $candidateName
-                        break
+            try {
+                $dirUrl = "$($bases[0])/$release/Workstation/x86_64/iso/"
+                $isoIndex = Invoke-WebRequest -UseBasicParsing -Uri $dirUrl -TimeoutSec 8 -ErrorAction Stop
+                $candidates = $isoIndex.Links |
+                    Where-Object { $_.href -match "^Fedora-Workstation-Live.*\.iso$" } |
+                    Select-Object -ExpandProperty href -Unique
+                $parsed = foreach ($name in $candidates) {
+                    if ($name -match "^Fedora-Workstation-Live(?:-x86_64)?-\d+-1\.(\d+)(?:\.x86_64)?\.iso$") {
+                        [PSCustomObject]@{ Name = $name; RevMinor = [int]$Matches[1] }
                     }
                 }
-            }
+                if ($parsed) {
+                    $resolvedName = ($parsed | Sort-Object RevMinor -Descending | Select-Object -First 1).Name
+                } elseif ($candidates) {
+                    $resolvedName = $candidates | Select-Object -First 1
+                }
+            } catch {}
 
             if ($resolvedName) {
                 return @($bases | ForEach-Object { "$_/$release/Workstation/x86_64/iso/$resolvedName" })
@@ -445,12 +454,12 @@ Register-PowerToolsModule `
     function Global:ISO-GetLatestCachyOSUrls {
         ISO-EnableTls
         try {
-            $index = Invoke-WebRequest -UseBasicParsing -Uri "https://mirror.cachyos.org/ISO/desktop/" -TimeoutSec 25 -ErrorAction Stop
+            $index = Invoke-WebRequest -UseBasicParsing -Uri "https://mirror.cachyos.org/ISO/desktop/" -TimeoutSec 8 -ErrorAction Stop
             $dirs = $index.Links | Where-Object { $_.href -match "^\d{6}/$" } | ForEach-Object { $_.href.TrimEnd("/") }
             if (-not $dirs -or $dirs.Count -eq 0) { return @() }
 
             $latestDir = ($dirs | Sort-Object -Descending | Select-Object -First 1)
-            $dirPage = Invoke-WebRequest -UseBasicParsing -Uri "https://mirror.cachyos.org/ISO/desktop/$latestDir/" -TimeoutSec 25 -ErrorAction Stop
+            $dirPage = Invoke-WebRequest -UseBasicParsing -Uri "https://mirror.cachyos.org/ISO/desktop/$latestDir/" -TimeoutSec 8 -ErrorAction Stop
             $iso = $dirPage.Links | Where-Object { $_.href -match "^cachyos-desktop-linux-\d{6}\.iso$" } | Select-Object -First 1 -ExpandProperty href
             if (-not $iso) { $iso = "cachyos-desktop-linux-$latestDir.iso" }
 
@@ -876,6 +885,17 @@ Register-PowerToolsModule `
                     return
                 }
             }
+            
+            $selectedNames = @()
+            if ($Global:ISO_cbUbuntu.IsChecked)  { $selectedNames += "Ubuntu" }
+            if ($Global:ISO_cbDebian.IsChecked)  { $selectedNames += "Debian" }
+            if ($Global:ISO_cbFedora.IsChecked)  { $selectedNames += "Fedora" }
+            if ($Global:ISO_cbArch.IsChecked)    { $selectedNames += "Arch Linux" }
+            if ($Global:ISO_cbCachyOS.IsChecked) { $selectedNames += "CachyOS" }
+            if ($Global:ISO_cbPopOS.IsChecked)   { $selectedNames += "Pop!_OS" }
+            ISO-AddLog "Selected distributions: $($selectedNames -join ', ')" "INFO"
+            ISO-AddLog "Resolving latest ISO URLs..." "INFO"
+            ISO-PumpUi
 
             $jobs = ISO-GetJobList -Dest $dest -Token $Global:ISO_cancelFlag.Token
             if ($jobs.Count -eq 0) {
@@ -892,7 +912,6 @@ Register-PowerToolsModule `
                 $job.ErrorLogPath = $errorLogPath
             }
 
-            ISO-AddLog "Selected distributions: $((@($jobs | ForEach-Object { $_.IsoName }) -join ', '))" "INFO"
             ISO-AddLog "Destination: $dest" "INFO"
             ISO-AddLog "Detailed error log: $errorLogPath" "INFO"
 

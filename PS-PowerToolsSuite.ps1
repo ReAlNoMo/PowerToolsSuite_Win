@@ -627,7 +627,7 @@ function Global:Update-PTSStyles {
 $reader            = New-Object System.Xml.XmlNodeReader $xaml
 $Global:PTS_Window = [Windows.Markup.XamlReader]::Load($reader)
 
-$Global:PTS_Window.Add_DispatcherUnhandledException({
+$Global:PTS_Window.Dispatcher.add_UnhandledException({
     param($sender, $e)
     Write-PTSExceptionReport -Context "WPF.DispatcherUnhandledException" -Exception $e.Exception -Extra @{
         handled_before = $e.Handled
