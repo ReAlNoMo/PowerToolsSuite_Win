@@ -1,5 +1,6 @@
 # Module: Sandboxie Browser Launcher
 # Launches browsers inside a Sandboxie-Plus sandbox in private/incognito mode.
+# Browser detection via Windows Registry + Where-Object fallback (path-independent).
 
 Register-PowerToolsModule `
     -Id          "sandboxie-browser-launcher" `
@@ -139,17 +140,160 @@ Register-PowerToolsModule `
     $script:SBX_logBorder.BorderBrush    = $Global:PTS_Brush["LogBorder"]
 
     # ===========================================================================
-    # SANDBOXIE + BROWSER DEFINITIONS
+    # REGISTRY-BASED BROWSER DETECTION (path-independent)
+    # Checks: Registry App Paths, HKLM/HKCU Uninstall, WHERE command fallback
     # ===========================================================================
-    $script:SBX_sandboxieExe = "C:\Program Files\Sandboxie-Plus\Start.exe"
+    function Global:SBX-FindBrowser {
+        param([string]$ExeName, [string[]]$RegistryNames)
+
+        # Method 1: App Paths registry (most reliable)
+        $appPathKeys = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\$ExeName",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\$ExeName"
+        )
+        foreach ($key in $appPathKeys) {
+            try {
+                $val = (Get-ItemProperty -Path $key -Name "(default)" -EA Stop)."(default)"
+                if ($val -and (Test-Path $val)) { return $val }
+            } catch {}
+        }
+
+        # Method 2: Uninstall registry (HKLM + HKCU, 32 + 64 bit)
+        $uninstallRoots = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKCU:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        )
+        foreach ($root in $uninstallRoots) {
+            if (-not (Test-Path $root)) { continue }
+            $keys = Get-ChildItem -Path $root -EA SilentlyContinue
+            foreach ($key in $keys) {
+                try {
+                    $props = Get-ItemProperty -Path $key.PSPath -EA Stop
+                    $match = $false
+                    foreach ($name in $RegistryNames) {
+                        if ($props.DisplayName -like "*$name*") { $match = $true; break }
+                    }
+                    if (-not $match) { continue }
+
+                    # Try InstallLocation first
+                    if ($props.InstallLocation) {
+                        $candidate = Join-Path $props.InstallLocation $ExeName
+                        if (Test-Path $candidate) { return $candidate }
+                    }
+                    # Try DisplayIcon (often full path to exe)
+                    if ($props.DisplayIcon) {
+                        $iconPath = $props.DisplayIcon -split "," | Select-Object -First 1
+                        $iconPath = $iconPath.Trim('"')
+                        if ($iconPath -like "*$ExeName*" -and (Test-Path $iconPath)) { return $iconPath }
+                    }
+                } catch {}
+            }
+        }
+
+        # Method 3: WHERE command (searches PATH + common locations)
+        try {
+            $found = (Get-Command $ExeName -EA Stop).Source
+            if ($found -and (Test-Path $found)) { return $found }
+        } catch {}
+
+        return $null
+    }
+
+    function Global:SBX-FindSandboxie {
+        # Check registry App Paths
+        $appPath = "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\App Paths\Start.exe"
+        try {
+            $val = (Get-ItemProperty -Path $appPath -Name "(default)" -EA Stop)."(default)"
+            if ($val -and (Test-Path $val) -and $val -like "*Sandboxie*") { return $val }
+        } catch {}
+
+        # Check Uninstall registry
+        $uninstallRoots = @(
+            "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        )
+        foreach ($root in $uninstallRoots) {
+            if (-not (Test-Path $root)) { continue }
+            Get-ChildItem -Path $root -EA SilentlyContinue | ForEach-Object {
+                try {
+                    $props = Get-ItemProperty -Path $_.PSPath -EA Stop
+                    if ($props.DisplayName -like "*Sandboxie*") {
+                        if ($props.InstallLocation) {
+                            $candidate = Join-Path $props.InstallLocation "Start.exe"
+                            if (Test-Path $candidate) { return $candidate }
+                        }
+                    }
+                } catch {}
+            }
+        }
+
+        # Fallback: well-known paths (both Program Files variants)
+        @(
+            "$env:ProgramFiles\Sandboxie-Plus\Start.exe"
+            "$env:ProgramFiles\Sandboxie\Start.exe"
+            "${env:ProgramFiles(x86)}\Sandboxie-Plus\Start.exe"
+            "${env:ProgramFiles(x86)}\Sandboxie\Start.exe"
+        ) | ForEach-Object { if (Test-Path $_) { return $_ } }
+
+        return $null
+    }
+
+    # ===========================================================================
+    # RESOLVE PATHS AT LOAD TIME
+    # ===========================================================================
+    $script:SBX_sandboxieExe = SBX-FindSandboxie
 
     $script:SBX_browsers = @(
-        @{ Id="chrome";    Name="Google Chrome";  Path="C:\Program Files\Google\Chrome\Application\chrome.exe";                   Arg="--incognito"    }
-        @{ Id="firefox";   Name="Mozilla Firefox"; Path="C:\Program Files\Mozilla Firefox\firefox.exe";                           Arg="-private-window" }
-        @{ Id="brave";     Name="Brave";           Path="C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe";     Arg="--incognito"    }
-        @{ Id="chromium";  Name="Chromium";        Path="C:\Program Files\Chromium\Application\chromium.exe";                     Arg="--incognito"    }
-        @{ Id="vivaldi";   Name="Vivaldi";         Path="C:\Program Files\Vivaldi\Application\vivaldi.exe";                       Arg="--private"      }
-        @{ Id="librewolf"; Name="LibreWolf";       Path="C:\Program Files\LibreWolf\librewolf.exe";                               Arg="-private-window" }
+        @{
+            Id     = "chrome"
+            Name   = "Google Chrome"
+            Exe    = "chrome.exe"
+            Reg    = @("Google Chrome")
+            Arg    = "--incognito"
+            Path   = SBX-FindBrowser -ExeName "chrome.exe" -RegistryNames @("Google Chrome")
+        }
+        @{
+            Id     = "firefox"
+            Name   = "Mozilla Firefox"
+            Exe    = "firefox.exe"
+            Reg    = @("Firefox", "Mozilla Firefox")
+            Arg    = "-private-window"
+            Path   = SBX-FindBrowser -ExeName "firefox.exe" -RegistryNames @("Firefox", "Mozilla Firefox")
+        }
+        @{
+            Id     = "brave"
+            Name   = "Brave"
+            Exe    = "brave.exe"
+            Reg    = @("Brave", "Brave Browser")
+            Arg    = "--incognito"
+            Path   = SBX-FindBrowser -ExeName "brave.exe" -RegistryNames @("Brave", "Brave Browser")
+        }
+        @{
+            Id     = "chromium"
+            Name   = "Chromium"
+            Exe    = "chromium.exe"
+            Reg    = @("Chromium")
+            Arg    = "--incognito"
+            Path   = SBX-FindBrowser -ExeName "chromium.exe" -RegistryNames @("Chromium")
+        }
+        @{
+            Id     = "vivaldi"
+            Name   = "Vivaldi"
+            Exe    = "vivaldi.exe"
+            Reg    = @("Vivaldi")
+            Arg    = "--private"
+            Path   = SBX-FindBrowser -ExeName "vivaldi.exe" -RegistryNames @("Vivaldi")
+        }
+        @{
+            Id     = "librewolf"
+            Name   = "LibreWolf"
+            Exe    = "librewolf.exe"
+            Reg    = @("LibreWolf")
+            Arg    = "-private-window"
+            Path   = SBX-FindBrowser -ExeName "librewolf.exe" -RegistryNames @("LibreWolf")
+        }
     )
 
     $script:SBX_buttonMap = @{
@@ -175,22 +319,30 @@ Register-PowerToolsModule `
     }
 
     function Global:SBX-Launch {
-        param([string]$BrowserPath, [string]$PrivateArg, [string]$BrowserName)
+        param([string]$BrowserId)
+        $browser = $script:SBX_browsers | Where-Object { $_.Id -eq $BrowserId } | Select-Object -First 1
         $sandbox = $script:SBX_sandboxBox.Text.Trim()
+
         if ([string]::IsNullOrEmpty($sandbox)) {
             [System.Windows.MessageBox]::Show("Please enter a sandbox name.", "Input Required",
                 [System.Windows.MessageBoxButton]::OK,
                 [System.Windows.MessageBoxImage]::Warning) | Out-Null
             return
         }
-        if (-not (Test-Path $BrowserPath)) {
-            SBX-AddLog "$BrowserName not found: $BrowserPath" "FAIL"; return
+        if (-not $browser.Path -or -not (Test-Path $browser.Path)) {
+            SBX-AddLog "$($browser.Name) not found on this system." "FAIL"
+            return
+        }
+        if (-not $script:SBX_sandboxieExe -or -not (Test-Path $script:SBX_sandboxieExe)) {
+            SBX-AddLog "Sandboxie-Plus not found." "FAIL"
+            return
         }
         try {
-            Start-Process -FilePath $script:SBX_sandboxieExe -ArgumentList "/box:$sandbox", $BrowserPath, $PrivateArg
-            $script:SBX_statusText.Text       = "$BrowserName started in [$sandbox]"
+            Start-Process -FilePath $script:SBX_sandboxieExe -ArgumentList "/box:$sandbox", $browser.Path, $browser.Arg
+            $script:SBX_statusText.Text       = "$($browser.Name) started in [$sandbox]"
             $script:SBX_statusText.Foreground = $Global:PTS_Brush["Success"]
-            SBX-AddLog "$BrowserName launched in sandbox [$sandbox]" "OK"
+            SBX-AddLog "$($browser.Name) launched in sandbox [$sandbox]" "OK"
+            SBX-AddLog "Path: $($browser.Path)" "INFO"
         } catch {
             SBX-AddLog "Launch failed: $_" "FAIL"
         }
@@ -199,24 +351,29 @@ Register-PowerToolsModule `
     # ===========================================================================
     # PREREQUISITE CHECK
     # ===========================================================================
-    $hasSandboxie = Test-Path $script:SBX_sandboxieExe
     $lines = @()
-    $lines += if ($hasSandboxie) { "[OK]  Sandboxie-Plus detected" } else { "[--]  Sandboxie-Plus NOT found" }
+    if ($script:SBX_sandboxieExe) {
+        $lines += "[OK]  Sandboxie-Plus detected: $script:SBX_sandboxieExe"
+    } else {
+        $lines += "[--]  Sandboxie-Plus NOT found"
+    }
 
     foreach ($browser in $script:SBX_browsers) {
-        $detected = Test-Path $browser.Path
-        $status   = if ($detected) { "[OK] " } else { "[--]" }
-        $lines   += "$status $($browser.Name)"
+        if ($browser.Path) {
+            $lines += "[OK]  $($browser.Name): $($browser.Path)"
+        } else {
+            $lines += "[--]  $($browser.Name): not detected"
+        }
     }
 
     $script:SBX_prereqText.Text = $lines -join "`n"
 
-    if (-not $hasSandboxie) {
+    if (-not $script:SBX_sandboxieExe) {
         foreach ($btn in $script:SBX_buttonMap.Values) { $btn.IsEnabled = $false }
         $script:SBX_prereqText.Foreground = $Global:PTS_Brush["Danger"]
     } else {
         foreach ($browser in $script:SBX_browsers) {
-            if (-not (Test-Path $browser.Path)) {
+            if (-not $browser.Path) {
                 $script:SBX_buttonMap[$browser.Id].IsEnabled = $false
             }
         }
@@ -225,24 +382,13 @@ Register-PowerToolsModule `
     # ===========================================================================
     # EVENT HANDLERS
     # ===========================================================================
-    $script:SBX_chromeBtn.Add_Click({
-        SBX-Launch -BrowserPath "C:\Program Files\Google\Chrome\Application\chrome.exe" -PrivateArg "--incognito" -BrowserName "Google Chrome"
-    })
-    $script:SBX_firefoxBtn.Add_Click({
-        SBX-Launch -BrowserPath "C:\Program Files\Mozilla Firefox\firefox.exe" -PrivateArg "-private-window" -BrowserName "Mozilla Firefox"
-    })
-    $script:SBX_braveBtn.Add_Click({
-        SBX-Launch -BrowserPath "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe" -PrivateArg "--incognito" -BrowserName "Brave"
-    })
-    $script:SBX_chromiumBtn.Add_Click({
-        SBX-Launch -BrowserPath "C:\Program Files\Chromium\Application\chromium.exe" -PrivateArg "--incognito" -BrowserName "Chromium"
-    })
-    $script:SBX_vivaldiBtn.Add_Click({
-        SBX-Launch -BrowserPath "C:\Program Files\Vivaldi\Application\vivaldi.exe" -PrivateArg "--private" -BrowserName "Vivaldi"
-    })
-    $script:SBX_librewolfBtn.Add_Click({
-        SBX-Launch -BrowserPath "C:\Program Files\LibreWolf\librewolf.exe" -PrivateArg "-private-window" -BrowserName "LibreWolf"
-    })
+    $script:SBX_chromeBtn.Add_Click({    SBX-Launch -BrowserId "chrome"    })
+    $script:SBX_firefoxBtn.Add_Click({   SBX-Launch -BrowserId "firefox"   })
+    $script:SBX_braveBtn.Add_Click({     SBX-Launch -BrowserId "brave"     })
+    $script:SBX_chromiumBtn.Add_Click({  SBX-Launch -BrowserId "chromium"  })
+    $script:SBX_vivaldiBtn.Add_Click({   SBX-Launch -BrowserId "vivaldi"   })
+    $script:SBX_librewolfBtn.Add_Click({ SBX-Launch -BrowserId "librewolf" })
+
     $script:SBX_clearLog.Add_Click({
         $script:SBX_logBox.Text = ""
         SBX-AddLog "Log cleared." "INFO"
